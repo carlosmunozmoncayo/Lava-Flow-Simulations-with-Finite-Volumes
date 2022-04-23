@@ -1,9 +1,12 @@
-\documentclass[12pt]{extarticle}
+\documentclass[12pt]{article}
+%\usepackage[a4paper, total={6in, 8in}]{geometry}
+\usepackage{layout}
+\usepackage{xcolor}
 \usepackage[utf8]{inputenc}
 \usepackage{cite}
 \usepackage{amsmath}
 
-\title{AMCS 333 Project Proposal}
+\title{AMCS 333 Project Progress Report}
 \author{Carlos Muñoz}
 \date{\today}
 
@@ -11,24 +14,114 @@
 
 \maketitle
 
-\section{Problem}
-Given the large number of people living near active volcanoes worldwide, it is of prime importance to study the nature and evolution of volcanic eruptions. Lava flows propagation is particularly  important in order to develop effective construction and hazard mitigation strategies. Given the variety of physical phenomena involved in lava flow such as volcano topography, eruptive and thermal conditions, and rheological laws, there is not a single dominant approach for its simulation and forecasting. Some of the most popular numerical models are based on cellular automata, stochastic processes, and depth-averaged partial differential equations, being the latter the approach of interest in this project \cite{cordonnier2016benchmarking}.
+This project is concerned with a finite volume based approach for the simulation of lava flows. 
+The mathematical model and numerical methods used for this purpose  will be analogous to those presented in \cite{costa2005numerical} and, therefore, we expect to reproduce the results presented there as a first step. 
+Furthermore, we would like to explore the use of methods with different properties, e.g. higher order of accuracy and strucure preservation, for the numerical solution of our problem.
 
+\section{Lava Flow Modeling and Simulation}
 
-\section{Method}
+To determine the path and reach of a lava flow during an eruption is of prime importance for risk assesment and hazard mitigation strategies.
+However, the numerical simulation of lava flows can be extremely challenging due to the amount of physical processes that take part in this phenomena.
+Hence, assuming certain simplifications on the quantities involved and their interactions, as well as fixing empirical parameters depending on the problem setting,  is necessary for  mathematical models and numerical methods to be feasible and accurate.\\
 
-We consider the model proposed by Costa and Macedonio \cite{costa2005numerical} based on the two-dimensional shallow water equations with source terms, \eqref{eq: 1}-\eqref{eq: 4}. Here an homogeneous incompressible fluid is assumed, and the depth of the lava $h$, the particle velocities in the x and y components, $U$ and $V$, and the temperature $T$, are assumed to be the average across any vertical column of fluid. The thermal balance equation \eqref{eq: 4} is added given the temperature dependence of the viscosity. $\beta_ij$, $\mathcal{E}$, $\mathcal{W}$, and $\mathcal{K}$ are semiempirical parameters, $T_c$, $T_{env}$, $T_{r}$ represent the temperature of the ground, environment, and lava at the vent respectively. $\gamma(T)$ is a function that compresses wall friction and the effect of heat in the flow velocity.
+{\color{red}Add a very brief discussion about other solvers using SWEs, Volcflow, and the other one 3D. Also talk about the benchmarking paper, how difficult it is to assess methods and briefly what other approaches are taken for this type of things.}\\
+
+In this work, we are interested in the model proposed by Costa and Macedonio \cite{costa2005numerical}, based on the two-dimensional shallow water equations with source terms, \eqref{eq: 1}-\eqref{eq: 3}.
+Here, an homogeneous incompressible fluid is assumed, and the depth of the lava $h$, the particle velocities in the x and y components, $U$ and $V$ respectively, and the temperature $T$, are assumed to be the average across any vertical column of fluid. 
+The thermal balance equation \eqref{eq: 4} is added to the system to describe a temperature dependent viscosity.
+
 
 \begin{align}
 \frac{\partial h}{\partial t}+\frac{\partial(U h)}{\partial x}+\frac{\partial(V h)}{\partial y}&=0 \label{eq: 1}\\
-\frac{\partial(U h)}{\partial t}+\frac{\partial\left(\beta_{x x} U^{2} h+g h^{2} / 2\right)}{\partial x}+\frac{\partial\left(\beta_{y x} U V h\right)}{\partial y}&=-g h \frac{\partial H}{\partial x}-\gamma U \label{eq: 2}\\
-\frac{\partial(V h)}{\partial t}+\frac{\partial\left(\beta_{x y} U V h\right)}{\partial x}+\frac{\partial\left(\beta_{y y} V^{2} h+g h^{2} / 2\right)}{\partial y}&=-g h \frac{\partial H}{\partial y}-\gamma V \label{eq: 3}\\
-\frac{\partial(T h)}{\partial t}+\frac{\partial\left(\beta_{T x} U T h\right)}{\partial x}+\frac{\partial\left(\beta_{T y} V T h\right)}{\partial y}&=-\mathcal{E}\left(T^{4}-T_{e n v}^{4}\right)+ \label{eq: 4}\\
+\frac{\partial(U h)}{\partial t}+\frac{\partial\left( U^{2} h+g h^{2} / 2\right)}{\partial x}+\frac{\partial\left( U V h\right)}{\partial y}&=-g h \frac{\partial H}{\partial x}-\gamma U \label{eq: 2}\\
+\frac{\partial(V h)}{\partial t}+\frac{\partial\left( U V h\right)}{\partial x}+\frac{\partial\left( V^{2} h+g h^{2} / 2\right)}{\partial y}&=-g h \frac{\partial H}{\partial y}-\gamma V \label{eq: 3}\\
+\frac{\partial(T h)}{\partial t}+\frac{\partial\left( U T h\right)}{\partial x}+\frac{\partial\left( V T h\right)}{\partial y}&=-\mathcal{E}\left(T^{4}-T_{e n v}^{4}\right)+ \label{eq: 4}\\
 \quad-\mathcal{W}\left(T-T_{e n v}\right)-\mathcal{H}\left(T-T_{c}\right)+\mathcal{K}\left(U^{2}+V^{2}\right) &\exp \left[-b\left(T-T_{r}\right)\right] \notag
 \end{align}
- 
 
-\section{Goals}
+Let us briefly describe the parameters appearing in this system, most of which are dependent on the geological properties of the lava flow to be studied. $T_c$, $T_{env}$, $T_{r}$ represent the temperature of the ground, environment, and lava at the vent respectively.
+$\gamma(T)$ is a function that compresses wall friction and the effect of heat in the flow velocity, and it is given by $\gamma(T)=\frac{3\nu_r}{h}\exp(-b(T-T_r))$.
+Here $b$ is a rheological parameter describing small scale phenomena that influence viscosity like crystalization; and $\nu_r=\mu_r/\rho$, where $\rho$ is the density of the fluid and $\mu_r$ its viscosity at the vent.\\
+
+
+
+
+
+The term $\mathcal{E}\left(T^{4}-T_{e n v}^{4}\right)$
+
+$\mathcal{E}$, $\mathcal{W}$, and $\mathcal{K}$ are semiempirical parameters,
+
+
+\section{Numerical Solution with Finite Volumes}
+
+In order to analyze its characteristic structure let us write our system in the compact form 
+\begin{align}
+    q_t+f(q)_x+g(q)_y=S(q),
+\end{align}
+where 
+$
+q=\begin{pmatrix} h,& Uh, & Vh,& Th\end{pmatrix}^T.
+$
+Computing f'(q) we get
+\begin{align}
+    f'(q)=
+    \begin{pmatrix}
+        0 & 1 & 0 & 0\\
+        q_2^2/q_1^2 & 2q_2/q_1 & 0 & 0\\
+        -q_2q_3/q_1^2 & q_3/q_1 & q_2/q_1 & 0\\
+        -q_2q_4/q_1^2 & 1_4/q_1 & 0 & q_2/q_1
+    \end{pmatrix}
+    =\begin{pmatrix}
+        0 & 1 & 0 & 0\\
+        -U^2+gh & 2U & 0 & 0\\
+        -UV & V & U & 0\\
+        -UT & T & 0 & U
+    \end{pmatrix}.
+\end{align}
+Furthermore, the eigenvalues of f'(q) are 
+\begin{align}
+    \label{eq: eigenvalues f'(q)}
+    \lambda^x_1=U-\sqrt{gh}, \quad \lambda^x_2=\lambda^x_3=U,\quad \lambda^x_4=U+\sqrt{gh},
+\end{align}
+and their corresponding eigenvectors are given by
+\begin{align}
+    r^x_1=
+    \begin{pmatrix} 
+        1\\
+        U-\sqrt{gh}\\
+        V\\
+        T
+    \end{pmatrix},
+    \quad
+    r^x_2=
+    \begin{pmatrix} 
+        0\\
+        0\\
+        1\\
+        0
+    \end{pmatrix},
+    \quad
+    r^x_3=
+    \begin{pmatrix} 
+        0\\
+        0\\
+        0\\
+        1
+    \end{pmatrix},
+    \quad
+    r^x_4=
+    \begin{pmatrix} 
+        1\\
+        U+\sqrt{gh}\\
+        V\\
+        T
+    \end{pmatrix}.
+\end{align}
+
+
+
+
+
 
 The main objective of the proposed project is to reproduce the numerical method for simulation of lava flows presented in \cite{costa2005numerical} using PyClaw. For this purpose an appropriate Riemann solver for the homogeneous system must be implemented, since the original method uses Godunov splitting to handle the source terms. Given the stiffness of the latter, an implicit time integration method must also be used. A difficulty that will be faced in this process is the presence of a wet-dry front at every time. \\
 
