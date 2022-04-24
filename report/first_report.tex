@@ -1,10 +1,12 @@
 \documentclass[12pt]{article}
-%\usepackage[a4paper, total={6in, 8in}]{geometry}
+\usepackage[left=3cm, right=3cm, top=2cm]{geometry}
 \usepackage{layout}
 \usepackage{xcolor}
 \usepackage[utf8]{inputenc}
 \usepackage{cite}
 \usepackage{amsmath}
+\usepackage{enumitem}
+\newcommand{\sgh}{\sqrt{g\bar{h}}} %Sound speed for SWEs
 
 \title{AMCS 333 Project Progress Report}
 \author{Carlos Muñoz}
@@ -14,10 +16,6 @@
 
 \maketitle
 
-This project is concerned with a finite volume based approach for the simulation of lava flows. 
-The mathematical model and numerical methods used for this purpose  will be analogous to those presented in \cite{costa2005numerical} and, therefore, we expect to reproduce the results presented there as a first step. 
-Furthermore, we would like to explore the use of methods with different properties, e.g. higher order of accuracy and strucure preservation, for the numerical solution of our problem.
-
 \section{Lava Flow Modeling and Simulation}
 
 To determine the path and reach of a lava flow during an eruption is of prime importance for risk assesment and hazard mitigation strategies.
@@ -26,7 +24,7 @@ Hence, assuming certain simplifications on the quantities involved and their int
 
 {\color{red}Add a very brief discussion about other solvers using SWEs, Volcflow, and the other one 3D. Also talk about the benchmarking paper, how difficult it is to assess methods and briefly what other approaches are taken for this type of things.}\\
 
-In this work, we are interested in the model proposed by Costa and Macedonio \cite{costa2005numerical}, based on the two-dimensional shallow water equations with source terms, \eqref{eq: 1}-\eqref{eq: 3}.
+In this work we are interested in the model proposed by Costa and Macedonio \cite{costa2005numerical}, based on the two-dimensional shallow water equations with source terms, \eqref{eq: 1}-\eqref{eq: 3}.
 Here, an homogeneous incompressible fluid is assumed, and the depth of the lava $h$, the particle velocities in the x and y components, $U$ and $V$ respectively, and the temperature $T$, are assumed to be the average across any vertical column of fluid. 
 The thermal balance equation \eqref{eq: 4} is added to the system to describe a temperature dependent viscosity.
 
@@ -36,25 +34,26 @@ The thermal balance equation \eqref{eq: 4} is added to the system to describe a 
 \frac{\partial(U h)}{\partial t}+\frac{\partial\left( U^{2} h+g h^{2} / 2\right)}{\partial x}+\frac{\partial\left( U V h\right)}{\partial y}&=-g h \frac{\partial H}{\partial x}-\gamma U \label{eq: 2}\\
 \frac{\partial(V h)}{\partial t}+\frac{\partial\left( U V h\right)}{\partial x}+\frac{\partial\left( V^{2} h+g h^{2} / 2\right)}{\partial y}&=-g h \frac{\partial H}{\partial y}-\gamma V \label{eq: 3}\\
 \frac{\partial(T h)}{\partial t}+\frac{\partial\left( U T h\right)}{\partial x}+\frac{\partial\left( V T h\right)}{\partial y}&=-\mathcal{E}\left(T^{4}-T_{e n v}^{4}\right)+ \label{eq: 4}\\
-\quad-\mathcal{W}\left(T-T_{e n v}\right)-\mathcal{H}\left(T-T_{c}\right)+\mathcal{K}\left(U^{2}+V^{2}\right) &\exp \left[-b\left(T-T_{r}\right)\right] \notag
+    \quad-\mathcal{W}\left(T-T_{e n v}\right)-\mathcal{H}\left(T-T_{c}\right)+\mathcal{K}& \left(U^{2}+V^{2}\right) \exp \left[-b\left(T-T_{r}\right)\right] \notag
 \end{align}
 
 Let us briefly describe the parameters appearing in this system, most of which are dependent on the geological properties of the lava flow to be studied. $T_c$, $T_{env}$, $T_{r}$ represent the temperature of the ground, environment, and lava at the vent respectively.
 $\gamma(T)$ is a function that compresses wall friction and the effect of heat in the flow velocity, and it is given by $\gamma(T)=\frac{3\nu_r}{h}\exp(-b(T-T_r))$.
 Here $b$ is a rheological parameter describing small scale phenomena that influence viscosity like crystalization; and $\nu_r=\mu_r/\rho$, where $\rho$ is the density of the fluid and $\mu_r$ its viscosity at the vent.\\
 
+The right-hand side terms of \eqref{eq: 4} represent radiative, convective, conductive and viscous relations between the lava flow and its heating respectively.
+We note that $\mathcal{E}$ and $\mathcal{W}$ are constant parameters, while $\mathcal{H}$ and $\mathcal{K}$ are both inversely proportional to $h$.
 
 
 
 
-The term $\mathcal{E}\left(T^{4}-T_{e n v}^{4}\right)$
-
-$\mathcal{E}$, $\mathcal{W}$, and $\mathcal{K}$ are semiempirical parameters,
 
 
-\section{Numerical Solution with Finite Volumes}
 
-In order to analyze its characteristic structure let us write our system in the compact form 
+
+\section{Characteristic Structure}
+
+Let us write our system in the compact form 
 \begin{align}
     q_t+f(q)_x+g(q)_y=S(q),
 \end{align}
@@ -62,7 +61,7 @@ where
 $
 q=\begin{pmatrix} h,& Uh, & Vh,& Th\end{pmatrix}^T.
 $
-Computing f'(q) we get
+Computing $f'(q)$ we get
 \begin{align}
     f'(q)=
     \begin{pmatrix}
@@ -78,7 +77,7 @@ Computing f'(q) we get
         -UT & T & 0 & U
     \end{pmatrix}.
 \end{align}
-Furthermore, the eigenvalues of f'(q) are 
+Furthermore, the eigenvalues of $f'(q)$ are 
 \begin{align}
     \label{eq: eigenvalues f'(q)}
     \lambda^x_1=U-\sqrt{gh}, \quad \lambda^x_2=\lambda^x_3=U,\quad \lambda^x_4=U+\sqrt{gh},
@@ -118,16 +117,252 @@ and their corresponding eigenvectors are given by
     \end{pmatrix}.
 \end{align}
 
+We get that the 1st and 4th field are genuinely nonlinear. However, we have
+\begin{align}
+    \nabla\lambda^x_2\cdot r^x_2=
+            \begin{pmatrix}
+                -U/h\\
+                1/h\\
+                0\\
+                0
+            \end{pmatrix}
+            \cdot
+            \begin{pmatrix} 
+                0\\
+                0\\
+                1\\
+                0
+            \end{pmatrix}=0,
+\end{align}
+and similarly $\nabla \lambda^x_3 \cdot r^x_3=0$, thus the 2nd and 3rd field are linearly degenerate. If, fixed $y=y_0$, we wanted to solve the system $q_t+f(q)_x=0$, our problem becomes exactly the 1D homogeneous shallow water equations with two passive tracers \cite[Section 13.2.1]{leveque2002finite}. 
+Indeed, the 2nd and 3rd wave would just carry a jump in V and T respectively as indicated by $r^x_2$ and $r^x_3$. Furthermore the quantities V and T would be clearly decoupled from the two first equations.\\
+
+Analogously, we consider 
+
+\begin{align}
+    g'(q)=
+    \begin{pmatrix}
+        0 & 0 & 1 & 0\\
+        -q_2 q_3/q_1^2 & q_3/q_1 & q_2/q_1 & 0\\
+        -q_3^2 /q_1^2 +gq_1 & 0 & 2q_3/q_1 & 0\\
+        -q_3q_4/q_1^2 & 0 & q_4/q_1 & q_3/q_1
+    \end{pmatrix}
+    =\begin{pmatrix}
+        0 & 0 & 1 & 0\\
+        -UV & V & U & 0\\
+        -V^2+gh & 0 & 2V & 0\\
+        -VT & 0 & T & V
+    \end{pmatrix},
+\end{align}
+
+with eigenvalues
+
+\begin{align}
+    \label{eq: eigenvalues g'(q)}
+    \lambda^y_1=V-\sqrt{gh}, \quad \lambda^y_2=\lambda^y_3=V,\quad \lambda^y_4=V+\sqrt{gh},
+\end{align}
+
+and eigenvectors
+
+\begin{align}
+    r^y_1=
+    \begin{pmatrix} 
+        1\\
+        U\\
+        V-\sqrt{gh}\\
+        T
+    \end{pmatrix},
+    \quad
+    r^y_2=
+    \begin{pmatrix} 
+        0\\
+        1\\
+        0\\
+        0
+    \end{pmatrix},
+    \quad
+    r^y_3=
+    \begin{pmatrix} 
+        0\\
+        0\\
+        0\\
+        1
+    \end{pmatrix},
+    \quad
+    r^y_4=
+    \begin{pmatrix} 
+        1\\
+        U\\
+        V+\sqrt{gh}\\
+        T\\
+    \end{pmatrix}.
+\end{align}
+
+Again, if we fix $x=x_0$ and want to solve the problem $q_t+g(q)_y=0$, we have the 1D homogeneous shallow water equations with two passive tracers. 
+In this case, the 2nd and 3rd wave are linearly degenerate and just carry a jump in the nonconserved quantities $U$ and $T$ respectively as suggested by the eigenvectors $r^y_2$ and $r^y_3$.
+
+\section{Numerical Solution}
+            
+In order to reproduce the method and results from \cite{costa2005numerical}, we use the wave propagation algorithms implemented in Clawpack, \cite{clawpack}. 
+We will handle the source term using Godunov splitting with a first order accurate semi-implicit time integration. Similarly, to use a one-dimensional approach in our two-dimensional problem, we will use dimensional splitting. Let us assume we have a uniform grid with $\Delta x= \Delta y$, and  the average of $q$ over each cell $\mathcal{C}_{i,j}$ at time $t_n$, $Q^n_{i,j}$. To advance the solution a time step $3\Delta t$, such that $t_{n+1}=t_n+3\Delta t$. We proceed in the following way
+
+\begin{enumerate}
+    \setlength{\itemindent}{+.5in}
+    \item We compute 
+        \begin{align}
+        Q^{*}_{i,j}=Q^n_{i,j}-\frac{\Delta t}{\Delta x}(F_{i+1/2,j}-F_{i-1/2,j}),
+        \end{align}
+        where $F_{i-1/2,j}$ is a numerical approximation of $f(\tilde{q}(0))$. Here $\tilde{q}(\xi)$ is an approximation of the similarity solution to the one dimensional Riemann problem 
+        \begin{align}
+            \label{eq:RP x direction}
+            q_t+f(q)_x&=0,\\
+            q(x,0)&=\begin{cases}
+                Q^n_{i-1,j}, &x<0,\\
+                Q^n_{i,j}, &x\geq 0.
+            \end{cases}
+        \end{align}
+
+    \item We compute
+        \begin{align}
+            Q^{**}_{i,j}=Q^{*}_{i,j}-\frac{\Delta t}{\Delta y}(G_{i,j+1/2}-G_{i,j-1/2}),
+        \end{align}
+        where $G_{i,j-1/2}$ is a numerical approximation of $g(\tilde{q}(0))$, and  $\tilde{q}(\xi)$ is an approximate solution to the Riemann problem 
+        \begin{align}
+            \label{eq:RP y direction}
+            q_t+g(q)_y&=0,\\
+            q(y,0)&=\begin{cases}
+                Q^*_{i,j-1}, &y<0,\\
+                Q^*_{i,j}, &y\geq 0.
+            \end{cases}
+        \end{align}
+    \item For each $i,\, j$ we set $Q^{n+1}_{i,j}=q(\Delta t;x_i,x_j)$, where $q$ is the numerical solution of 
+        \begin{align}
+            q_t(t,x_i,y_j)&=S(q(t,x_i,y_j)),\\
+            q(0,x_i,y_j)&=Q^{**}_{i,j}.
+        \end{align}
+
+The time step $\Delta t$ will  be determined by the waves propagated at steps 1 and 2 such that the CFL condition is satisfied. 
+So in the implementation of the 3rd step, we need to make sure that the method is stable, e.g., by taking a sequence of smaller substeps.
+
+\end{enumerate}
+
+\subsection{Approximate Riemann Solver}
+
+At each time step we need to solve Riemann problems in the $x$ and $y$ directions for steps 1 and 2. 
+As done by Costa and Macedonio, we follow the approach proposed in \cite{monthe1999positivity}. 
+This solution consists on a Roe linearization of the problem, using the averages
+
+\begin{align}
+    \label{eq: Roe averages}
+    \bar{h}&=\frac12(h_\ell+h_r), \quad & 
+    \bar{U}&=\frac{\sqrt{h_\ell}U_\ell+\sqrt{h_r}U_r}{\sqrt{h_\ell}+\sqrt{h_r}},\\
+    \bar{V}&=\frac{\sqrt{h_\ell}V_\ell+\sqrt{h_r}V_r}{\sqrt{h_\ell}+\sqrt{h_r}}, \quad &
+    \bar{T}&=\frac{\sqrt{h_\ell}T_\ell+\sqrt{h_r}T_r}{\sqrt{h_\ell}+\sqrt{h_r}}.
+\end{align}
+
+We consider then, a linearized version of \eqref{eq:RP x direction},
+\begin{align}
+            \label{eq:RP x direction Roe}
+            q_t+f'(\bar{q})q&=0,\\
+            q(x,0)&=\begin{cases}
+                Q_{i-1,j}, &x<0,\\
+                Q_{i,j}, &x\geq 0.
+            \end{cases}
+\end{align}
+Then the solution consists of 3 discontinuities $\alpha^p_{i-1/2}\bar{r}^x_p:=\alpha^p_{i-1/2}r^x_p(\bar{q})$ propagating at speeds $\bar{\lambda}^x_p:=\lambda^x_p(\bar{q})$, for $p\in\{1,2,4\}$. 
+Therefore it follows that
+
+\begin{align}
+   \delta:= Q_{i,j}-Q_{i-1,j}=\sum_{p=1}^4 \alpha^p_{i-1/2}\bar{r}^x_p,
+\end{align}
+
+and
+
+\begin{align}
+    \alpha_{i-1/2}=
+    R^{-1}\delta=
+    \begin{pmatrix}
+        \frac{\sgh+\bar{U}}{2\sgh} & \frac{-1}{2\sgh} & 0 & 0 \\
+        -\bar{V} & 0 & 1 & 0\\
+        -\bar{T} & 0 & 0 & 1\\
+        \frac{\sgh-\bar{U}}{2\sgh} & \frac{1}{2\sgh} & 0 & 0
+    \end{pmatrix}
+    \delta=
+    \begin{pmatrix}
+        \frac{ (\sgh+\bar{U})\delta_1-\delta_2}{2\sgh}\\
+        -\bar{V}\delta_1+\delta_3\\
+        -\bar{T}\delta_1+\delta_4\\
+        \frac{ (\sgh-\bar{V})\delta_1+\delta_2}{2\sgh}\
+    \end{pmatrix}.
+\end{align}
+
+Since we are using a wave propagation approach, we can write our first order updates in terms of the left and right going fluctuations at the interfaces $x_{i-1/2}$, see e.g. \cite[Section 15.3]{leveque2002finite},
+\begin{align}
+    \mathcal{A}^{-}\Delta Q_{i-1/2,j}=\sum_{p=1}^4(\bar{\lambda}^x_p)^{-}\alpha^p_{i-1/2}\bar{r}^x_p, \quad
+    \mathcal{A}^{+}\Delta Q_{i-1/2,j}=\sum_{p=1}^4(\bar{\lambda}^x_p)^{+}\alpha^p_{i+1/2}\bar{r}^x_p.
+\end{align}
+
+Sometimes it is necessary to apply corrections to the fluctuations, we consider two of them proposed in \cite{monthe1999positivity}.
+
+First, to enforce depth positivity, whenever $h_\ell=h_r=0$,  we set 
+\begin{align}
+    \mathcal{A}^{-}\Delta Q_{i-1/2,j}=-f(Q_{i-1,j}),\quad \mathcal{A}^{+}\Delta Q_{i-1/2,j}=f(Q_{i,j}).
+\end{align}
+If $h_\ell=0<h_r$, then
+\begin{align}
+    \mathcal{A}^{-}\Delta Q_{i-1/2,j}&=(f(Q_{i,j})-|f'(Q_{i,j})|Q_{i,j})/2-f(Q_{i-1,j}),\\
+    \mathcal{A}^{+}\Delta Q_{i-1/2,j}&=(f(Q_{i,j})+|f'(Q_{i,j})|Q_{i,j})/2.
+\end{align}
+If, on the other hand, we have $h_r=0<h_\ell$, we set
+\begin{align}
+    \mathcal{A}^{-}\Delta Q_{i-1/2,j}&=(-f(Q_{i-1,j})+|f'(Q_{i-1,j})|Q_{i-1,j})/2,\\
+    \mathcal{A}^{+}\Delta Q_{i-1/2,j}&=f(Q_{i,j})-(f(Q_{i-1,j})+|f'(Q_{i-1,j})|Q_{i-1,j})/2.
+\end{align}
+Finally, to avoid nonphysical solutions, we apply an entropy fix if the characteristic speeds suggest the presence of a transonic rarefaction.
+If the $p$th wave separates two states $Q_\ell$, $Q_r$ and $\lambda^x_p(Q_\ell)<0<\lambda^x_p(Q_r)$, we define the fluctuations as
+\begin{align}
+    \mathcal{A}^{-}\Delta Q_{i-1/2,j}=\sum_{k\neq p}(\bar{\lambda}^x_k)^{-}\alpha^k_{i-1/2}\bar{r}^x_k+(\lambda^{*x}_p)^{-}\alpha^p_{i-1/2}\bar{r}^x_p\\
+    \mathcal{A}^{+}\Delta Q_{i-1/2,j}=\sum_{k\neq p}(\bar{\lambda}^x_k)^{+}\alpha^k_{i-1/2}\bar{r}^x_k+(\lambda^{*x}_p)^{+}\alpha^p_{i-1/2}\bar{r}^x_p,
+\end{align}
+where
+\begin{align}
+    \lambda^{*x}_p=\lambda^x_p(Q_r)\left(\frac{\bar{\lambda}^x_p-\lambda^x(Q_\ell)}{\lambda^x_p(Q_r)-\lambda^x_p(Q_\ell)}\right).
+\end{align}
+
+Analogously, we can define an approximate Riemann solver for  $q_t+g(q)_y=0$ in the $y$ direction. 
+In Clawpack, however, given the similarity between the solvers, we just need to provide a single solver with a flag that indicates the direction in which we are solving.
+
+\subsection{Source Term Treatment}
+For the step 3 of our solution algorithm, we need to integrate the system of ODEs $q_t=S(q)$ over a time interval for some initial condition $q(0)=Q^{**}_{i,j}$. 
+We proceed with a first-oder semi-implicit integration proposed in \cite{monthe1999positivity},
+
+\begin{align}
+    q^{n+1}_1&=q(0)_1,\\
+    \frac{q^{n+1}_2-q^{n}_2}{\Delta t}&=-gh_n \frac{\partial H}{\partial x}-\frac{3\nu_r q^{n+1}_2}{{h_n}^2}e^{-b(T_n-T_r)},\\
+    \frac{q^{n+1}_3-q^{n}_3}{\Delta t}&=-gh_n \frac{\partial H}{\partial y}-\frac{3\nu_r q^{n+1}_3}{{h_n}^2}e^{-b(T_n-T_r)},\\
+    \frac{q^{n+1}_4-q^{n}_4}{\Delta t}&=-\mathcal{E}\left(T_n^{4}-T_{e n v}^{4}\right)-\mathcal{W}\left(T_n-T_{e n v}\right)\\
+    &-\mathcal{H}_n\left(T_n-T_{c}\right)+\mathcal{K}_n \left(U_n^{2}+V_n^{2}\right) \exp \left[-b\left(T_n-T_{r}\right)\right]. 
+\end{align}
+Here, $\frac{\partial H}{\partial x}$ and $\frac{\partial H}{\partial y}$ are some grid based discretizations of the topography's slopes. 
 
 
+\section{Next steps}
+\begin{itemize}
+    \item Implementation of the method described above in Clawpack. 
+        A Pyclaw script for the setting of the problem and a normal Riemann solver implemented in Fortran will be necessary.
+    \item Validation of the solver. A natural first approach is to test the numerical method with the Etna lava flows studied in \cite{costa2005numerical} and verify consistency with the results presented.
+        Some remarkable benchmarking works to be considered are \cite{cordonnier2016benchmarking} and \cite{dietterich2017benchmarking}. 
+        In \cite{cordonnier2016benchmarking}, Cordonnier et al. present several tests, with some of them including approximations of analytical solutions.
+        Dietterich et al. Present experimental settings with different complexities where physical properties or lava flows are incrementally taken into account. 
+        Both of these works provide access to their data and results.
+    \item Experiment with modifications to the solver.
+        We could use a high-resolution method for the homogeneous part of the system.
+        For example, using Lax-Wendroff instead of Gofdunov method. 
+        For this, a transverse solver must also be implemented in order to compute the correction fluxes in Clawpack.
+        Analogosuly, we could use a higher-order integration scheme for the integration of the source term.
+        Furthermore, as remarked in \cite{costa2005numerical}, the treatment of the source term directly in the Riemann solver is also a path that can be explored.
 
-
-
-The main objective of the proposed project is to reproduce the numerical method for simulation of lava flows presented in \cite{costa2005numerical} using PyClaw. For this purpose an appropriate Riemann solver for the homogeneous system must be implemented, since the original method uses Godunov splitting to handle the source terms. Given the stiffness of the latter, an implicit time integration method must also be used. A difficulty that will be faced in this process is the presence of a wet-dry front at every time. \\
-
-The performance of the method should be tested first with problems with known analytical solutions and then in a real world problem. To obtain the data used in \cite{costa2005numerical} would allow us to make a comparison with the original implementation. Also, several volcanic eruptions in recent years have been documented using top-notch technology and if it was accessible, it would be interesting to validate the model with this data.
-
-
+\end{itemize}
 \bibliographystyle{plain}
 \bibliography{M335}
 
