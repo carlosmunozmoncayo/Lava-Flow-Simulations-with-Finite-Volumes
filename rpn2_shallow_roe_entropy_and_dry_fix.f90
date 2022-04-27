@@ -120,8 +120,14 @@ subroutine rpn2(ixy,maxm,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apd
         wave(mv,1,i) = a1*v(i)
         wave(4,1,i) = a1*T(i)
         s(1,i) = u(i)-a(i)
-        sl = qr(mu,i-1)-dsqrt(qr(1,i-1)*grav)
-        sr = qr(mu,i-1)+wave(mu,1,i)-dsqrt((qr(1,i-1)+wave(1,1,i))*grav)
+        !left state of 1-wave  Ql
+        hl = qr(1,i-1)  
+        ul = qr(mu,i-1)/qr(1,i-1)
+        sl = ul-dsqrt(hl*grav)
+        !right state of 1-wave  Ql+W1
+        hr = hl+wave(1,1,i)
+        ur = (qr(mu,i-1)+wave(mu,1,i))/hr
+        sr = ur-dsqrt(hr*grav)
         !Check for a transonic 1-rarefaction
         if (sl <0 .AND. sr >0) then
             s(1,i)=sr*(s(1,i)-sl)/(sr-sl)
@@ -144,8 +150,14 @@ subroutine rpn2(ixy,maxm,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apd
         wave(mv,4,i) = a4*v(i)
         wave(4,4,i)= a4*T(i)
         s(4,i) = u(i)+a(i)
-        sl = ql(mu,i)-wave(mu,4,i)+dsqrt((ql(1,i-1)-wave(1,4,i))*grav)
-        sr = ql(mu,i)+dsqrt(ql(1,i)*grav)
+        !right state of 4-wave Qr
+        hr = ql(1,i)
+        ur = ql(mu,i)/hr
+        sr = ur+dsqrt(hr*grav)
+        !left state of 4-wave Qr-W4
+        hl = hr-wave(1,4,i)
+        ul = (ql(mu,i)-wave(mu,4,i))/hl
+        sl = ul+dsqrt(hl*grav)
         !Checking for a transonic 4-rarefaction
         if (sl <0 .AND. sr >0) then
             s(1,i)=sr*(s(1,i)-sl)/(sr-sl)

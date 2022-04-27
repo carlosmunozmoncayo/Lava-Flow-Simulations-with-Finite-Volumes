@@ -1,17 +1,20 @@
 #!/usr/bin/env python
 # encoding: utf-8
 r"""
-2D shallow water: radial dam break
+2D Lava flow: radial dam break
 ==================================
 
-Solve the 2D shallow water equations:
+Solve the 2D lava flow equations proposed by Costa and Macedonio (2005):
 
 .. math::
     h_t + (hu)_x + (hv)_y = 0 \\
-    (hu)_t + (hu^2 + \frac{1}{2}gh^2)_x + (huv)_y = 0 \\
-    (hv)_t + (huv)_x + (hv^2 + \frac{1}{2}gh^2)_y = 0.
+    (hu)_t + (hu^2 + \frac{1}{2}gh^2)_x + (huv)_y = -g h H_x-\gamma u \\
+    (hv)_t + (huv)_x + (hv^2 + \frac{1}{2}gh^2)_y = -g h H_y-\gamma v \\
+    (hT)_t + (huT)_x + (hvT)_y = -\mathcal{E}\left(T^{4}-T_{e n v}^{4}\right)-\mathcal{W}\left(T-T_{e n v}\right)\\
+    -\mathcal{H}\left(T-T_{c}\right)+\mathcal{K}& \left(U^{2}+V^{2}\right) \exp \left[-b\left(T-T_{r}\right)\right]
 
-The initial condition is a circular area with high depth surrounded by lower-depth water.
+
+The initial condition is a circular area with high depth surrounded by lower-depth lava.
 The top and right boundary conditions reflect, while the bottom and left boundaries
 are outflow.
 """
@@ -29,18 +32,65 @@ x_momentum=1
 y_momentum=2
 T_momentum=3
 
-def qinit(state,h_in=2.,h_out=1.,dam_radius=0.5,T_in=100, T_out=50):
+def qinit(state,h_in=4.,h_out=1.,dam_radius=0.5):
     x0=0.
     y0=0.
     X, Y = state.p_centers
     r = np.sqrt((X-x0)**2 + (Y-y0)**2)
+    rho,b,cp,kappa,lambd,Tc,T0,mu_r=get_lava_parameters("Etna")
 
     state.q[depth     ,:,:] = h_in*(r<=dam_radius) + h_out*(r>dam_radius)
     state.q[x_momentum,:,:] = 0.
     state.q[y_momentum,:,:] = 0.
-    state.q[T_momentum,:,:] = T_in*(r<=dam_radius) + T_out*(r>dam_radius)
+    state.q[T_momentum,:,:] = T0*h_in*(r<=dam_radius) + Tc*h_out*(r>dam_radius)
 
+#The model requires several parameters that depend on the lava we are trying to model
+def get_lava_parameters(lava_flow):
+    if lava_flow=="Etna":
+        rho=2500
+        b=0.02
+        cp=1200
+        kappa=2.0
+        lambd=70
+        Tc=1253
+        T0=1353
+        mu_r=1000
+    return rho,b,cp,kappa,lambd,Tc,T0,mu_r
+
+#Defining source term
+def source_step_Lava_Flow(solver,state,dt):
+    """
+    Source term integration, this handles bathymetry and the temperature
+    dependence of viscosity
+    This is a Clawpack-style source term routine, which approximates
+    the integral of the source terms over a step.
+    """
+    #Obtaining sparameters ccharacteristic to the lava
+    rho,b,cp,kappa,lambd,Tc,T0,mu_r=get_lava_parameters("Etna")
+    nu_r=mu_r/rho
+    T_env=300
+
+    q = state.q
+
+    h = q[0,:,:]
+    u   = q[1,:,:]/h
+    v   = q[2,:,:]/h
+    T  = q[2,:,:]/h
     
+    #Computing more parameters (these are for Etna lava flows)
+
+    H=(3*1.e-6)/h
+    E=1.5*1.e-15
+    W=2*1.e-6
+    K=(4*1.e-3)/h
+
+    #q[0,:,:] = q[0,:,:] - dt/rad * qstar[2,:,:]
+    q[1,:,:] = (h**2)*q[1,:,:]/(h**2+3*nu_r*dt*np.e**(-b*(T-T0)))
+    q[2,:,:] = (h**2)*q[2,:,:]/(h**2+3*nu_r*dt*np.e**(-b*(T-T0)))
+    q[3,:,:] = q[3,:,:]+dt*(-E*(T**4-T_env**4)-W*(T-T_env)-H*(T-Tc)+K*(u**2+v**2)*np.e**(-b*(T-T0)))
+
+
+
 def setup(kernel_language='Fortran', use_petsc=False, outdir='./_output',
           solver_type='classic', riemann_solver='monthe',disable_output=False):
     if use_petsc:
@@ -60,6 +110,7 @@ def setup(kernel_language='Fortran', use_petsc=False, outdir='./_output',
         solver = pyclaw.ClawSolver2D(rs)
         solver.limiters = pyclaw.limiters.tvd.MC
         solver.dimensional_split=True
+        solver.step_source=source_step_Lava_Flow
     elif solver_type == 'sharpclaw':
         solver = pyclaw.SharpClawSolver2D(rs)
 
@@ -83,7 +134,7 @@ def setup(kernel_language='Fortran', use_petsc=False, outdir='./_output',
 
 
     # Gravitational constant
-    state.problem_data['grav'] = 1.0
+    state.problem_data['grav'] = 9.8
 
     qinit(state)
 
