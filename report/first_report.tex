@@ -1,5 +1,5 @@
 \documentclass[12pt]{article}
-\usepackage[left=3cm, right=3cm, top=2cm]{geometry}
+\usepackage[left=2.5cm, right=2.5cm, top=2cm]{geometry}
 \usepackage{layout}
 \usepackage{xcolor}
 \usepackage[utf8]{inputenc}
@@ -22,7 +22,7 @@ To determine the path and reach of a lava flow during an eruption is of prime im
 However, the numerical simulation of lava flows can be extremely challenging due to the amount of physical processes that take part in this phenomena.
 Hence, assuming certain simplifications on the quantities involved and their interactions, as well as fixing empirical parameters depending on the problem setting,  is necessary for  mathematical models and numerical methods to be feasible and accurate.\\
 
-{\color{red}Add a very brief discussion about other solvers using SWEs, Volcflow, and the other one 3D. Also talk about the benchmarking paper, how difficult it is to assess methods and briefly what other approaches are taken for this type of things.}\\
+%{\color{red}Add a very brief discussion about other solvers using SWEs, Volcflow, and the other one 3D. Also talk about the benchmarking paper, how difficult it is to assess methods and briefly what other approaches are taken for this type of things.}\\
 
 In this work we are interested in the model proposed by Costa and Macedonio \cite{costa2005numerical}, based on the two-dimensional shallow water equations with source terms, \eqref{eq: 1}-\eqref{eq: 3}.
 Here, an homogeneous incompressible fluid is assumed, and the depth of the lava $h$, the particle velocities in the x and y components, $U$ and $V$ respectively, and the temperature $T$, are assumed to be the average across any vertical column of fluid. 
@@ -292,7 +292,7 @@ and
         \frac{ (\sgh+\bar{U})\delta_1-\delta_2}{2\sgh}\\
         -\bar{V}\delta_1+\delta_3\\
         -\bar{T}\delta_1+\delta_4\\
-        \frac{ (\sgh-\bar{V})\delta_1+\delta_2}{2\sgh}\
+        \frac{ (\sgh-\bar{U})\delta_1+\delta_2}{2\sgh}\
     \end{pmatrix}.
 \end{align}
 
@@ -346,7 +346,7 @@ We proceed with a first-oder semi-implicit integration proposed in \cite{monthe1
 Here, $\frac{\partial H}{\partial x}$ and $\frac{\partial H}{\partial y}$ are some grid based discretizations of the topography's slopes. 
 
 
-\section{Next steps}
+\section{Next Steps}
 \begin{itemize}
     \item Implementation of the method described above in Clawpack. 
         A Pyclaw script for the setting of the problem and a normal Riemann solver implemented in Fortran will be necessary.
