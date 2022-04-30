@@ -23,6 +23,7 @@ from __future__ import absolute_import
 import numpy as np
 import shallow_roe_monthe
 from clawpack import riemann
+import sys
 
 #We add a four equation for temperature
 num_eqn=4
@@ -42,7 +43,7 @@ def qinit(state,h_in=4.,h_out=1.,dam_radius=0.5):
     state.q[depth     ,:,:] = h_in*(r<=dam_radius) + h_out*(r>dam_radius)
     state.q[x_momentum,:,:] = 0.
     state.q[y_momentum,:,:] = 0.
-    state.q[T_momentum,:,:] = T0*h_in*(r<=dam_radius) + Tc*h_out*(r>dam_radius)
+    state.q[T_momentum,:,:] = T0*state.q[depth     ,:,:]   #T0*h_in*(r<=dam_radius) + Tc*h_out*(r>dam_radius)
 
 #The model requires several parameters that depend on the lava we are trying to model
 def get_lava_parameters(lava_flow):
@@ -54,6 +55,7 @@ def get_lava_parameters(lava_flow):
         lambd=70
         Tc=1253
         T0=1353
+        #T0=50
         mu_r=1000
     return rho,b,cp,kappa,lambd,Tc,T0,mu_r
 
@@ -70,24 +72,28 @@ def source_step_Lava_Flow(solver,state,dt):
     nu_r=mu_r/rho
     T_env=300
 
-    q = state.q
 
-    h = q[0,:,:]
-    u   = q[1,:,:]/h
-    v   = q[2,:,:]/h
-    T  = q[2,:,:]/h
-    
-    #Computing more parameters (these are for Etna lava flows)
+    #Doing several time integrations of source term to avoid stiffness
+    ddt=dt/10
+    for i in range(11):
+        q = state.q
 
-    H=(3*1.e-6)/h
-    E=1.5*1.e-15
-    W=2*1.e-6
-    K=(4*1.e-3)/h
+        h = q[0,:,:]
+        u   = q[1,:,:]/h
+        v   = q[2,:,:]/h
+        T  = q[3,:,:]/h
+        
+        #Computing more parameters (these are for Etna lava flows)
 
-    #q[0,:,:] = q[0,:,:] - dt/rad * qstar[2,:,:]
-    q[1,:,:] = (h**2)*q[1,:,:]/(h**2+3*nu_r*dt*np.e**(-b*(T-T0)))
-    q[2,:,:] = (h**2)*q[2,:,:]/(h**2+3*nu_r*dt*np.e**(-b*(T-T0)))
-    q[3,:,:] = q[3,:,:]+dt*(-E*(T**4-T_env**4)-W*(T-T_env)-H*(T-Tc)+K*(u**2+v**2)*np.e**(-b*(T-T0)))
+        H=(3*1.e-6)/h
+        E=1.5*1.e-15
+        W=2*1.e-6
+        K=(4*1.e-3)/h
+
+        #q[0,:,:] = q[0,:,:] - dt/rad * qstar[2,:,:]
+        q[1,:,:] = (h**2)*q[1,:,:]/(h**2+3*nu_r*ddt*np.exp(-b*(T-T0)))
+        q[2,:,:] = (h**2)*q[2,:,:]/(h**2+3*nu_r*ddt*np.exp(-b*(T-T0)))
+        q[3,:,:] = q[3,:,:]+dt*(-E*(T**4-T_env**4)-W*(T-T_env)-H*(T-Tc)+K*(u**2+v**2)*np.e**(-b*(T-T0)))
 
 
 
@@ -110,7 +116,8 @@ def setup(kernel_language='Fortran', use_petsc=False, outdir='./_output',
         solver = pyclaw.ClawSolver2D(rs)
         solver.limiters = pyclaw.limiters.tvd.MC
         solver.dimensional_split=True
-        solver.step_source=source_step_Lava_Flow
+        #If the line below is commented, just the homogeneous hyperbolic system is being solved
+        #solver.step_source=source_step_Lava_Flow
     elif solver_type == 'sharpclaw':
         solver = pyclaw.SharpClawSolver2D(rs)
 
@@ -122,10 +129,10 @@ def setup(kernel_language='Fortran', use_petsc=False, outdir='./_output',
     # Domain:
     xlower = -2.5
     xupper = 2.5
-    mx = 250
+    mx = 150
     ylower = -2.5
     yupper = 2.5
-    my = 250
+    my = 150
     x = pyclaw.Dimension(xlower,xupper,mx,name='x')
     y = pyclaw.Dimension(ylower,yupper,my,name='y')
     domain = pyclaw.Domain([x,y])
@@ -139,7 +146,7 @@ def setup(kernel_language='Fortran', use_petsc=False, outdir='./_output',
     qinit(state)
 
     claw = pyclaw.Controller()
-    claw.tfinal = 5
+    claw.tfinal = 0.1
     claw.solution = pyclaw.Solution(state,domain)
     claw.solver = solver
     solver.num_eqn=4
@@ -180,8 +187,8 @@ def setplot(plotdata):
     plotitem = plotaxes.new_plotitem(plot_type='2d_pcolor')
     plotitem.plot_var = 0
     plotitem.pcolor_cmap = colormaps.red_yellow_blue
-    plotitem.pcolor_cmin = 0.5
-    plotitem.pcolor_cmax = 1.5
+    #plotitem.pcolor_cmin = 0.5
+    #plotitem.pcolor_cmax = 1.5
     plotitem.add_colorbar = True
     
     # Scatter plot of depth

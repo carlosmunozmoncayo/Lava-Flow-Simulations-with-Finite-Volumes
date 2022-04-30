@@ -109,7 +109,7 @@ subroutine rpn2(ixy,maxm,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apd
         a1 = ((u(i)+a(i))*delta(1) - delta(2))*(0.50d0/a(i))
         a2 = -v(i)*delta(1) + delta(3)
         a3 = -T(i)*delta(4) + delta(4)
-        a4 = (-(u(i)-a(i))*delta(1) + delta(2))*(0.50d0/a(i))
+        a4 = ((-u(i)+a(i))*delta(1) + delta(2))*(0.50d0/a(i))
     
 !   # Compute the waves and speeds, apply entropy fix if needed as in (Monthe, 1999).
 !   # Note that there is no need to check for transonic rarefactions
@@ -122,7 +122,7 @@ subroutine rpn2(ixy,maxm,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apd
         s(1,i) = u(i)-a(i)
         !left state of 1-wave  Ql
         hl = qr(1,i-1)  
-        ul = qr(mu,i-1)/qr(1,i-1)
+        ul = qr(mu,i-1)/hl
         sl = ul-dsqrt(hl*grav)
         !right state of 1-wave  Ql+W1
         hr = hl+wave(1,1,i)
