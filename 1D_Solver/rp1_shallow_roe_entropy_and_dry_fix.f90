@@ -18,8 +18,7 @@ subroutine rp1(maxmx,num_eqn,num_waves,num_aux,num_ghost,num_cells, &
 ! On input, ql contains the state vector at the left edge of each cell
 !           qr contains the state vector at the right edge of each cell
 
-! This data is along a slice in the x-direction if ixy=1
-!                            or the y-direction if ixy=2.
+
 
 ! On output, wave contains the waves, s the speeds,
 ! and amdq, apdq the decomposition of the flux difference
@@ -49,17 +48,18 @@ subroutine rp1(maxmx,num_eqn,num_waves,num_aux,num_ghost,num_cells, &
     real(kind=8), intent(out), dimension(num_eqn,1-num_ghost:maxmx+num_ghost) :: amdq,apdq
 
 !   # Gravity constant set in the shallow1D.py or setprob.f90 file
-    real(kind=8):: grav
-    common /cparam/ grav
+    real(kind=8):: grav, dry_tolerance
+    common /cparam/ grav, dry_tolerance
 
 !   # Roe averages quantities of each interface
     !parameter (maxm2 = 1800)
     real(kind=8) :: h,u,T,a
     real(kind=8), dimension(3) :: delta 
+    real(kind=8), dimension(3) :: AbsJacFQl, AbsJacFQr
     real(kind=8) :: a1,a2,a3,a4
-    real(kind=8) :: hl,Tl,sl,hr,Tr,sr,ul, ur
+    real(kind=8) :: hl,Tl,sl,hr,Tr,sr,ul, ur, x,y,z
     real(kind=8) :: hsqrtl, hsqrtr, hsq2
-    integer :: m, mw, i
+    integer :: m, mw, i, j
 !   # Note that notation for u and v reflects assumption that the
 !   # Riemann problems are in the x-direction with u in the normal
 !   # direciton and v in the orthogonal direcion, but with the above
@@ -149,19 +149,91 @@ subroutine rp1(maxmx,num_eqn,num_waves,num_aux,num_ghost,num_cells, &
 !     # amdq = SUM s*wave   over left-going waves
 !     # apdq = SUM s*wave   over right-going waves
 
-    do 100 m=1,3
-        do 30 i=2-num_ghost,num_cells+num_ghost
-            amdq(m,i) = 0.d0
-            apdq(m,i) = 0.d0
-            do 90 mw=1,num_waves
-                if (s(mw,i) < 0.d0) then
-                    amdq(m,i) = amdq(m,i) + s(mw,i)*wave(m,mw,i)
-                else
-                    apdq(m,i) = apdq(m,i) + s(mw,i)*wave(m,mw,i)
-                endif
-            90 END DO
-        30 END DO
-    100 END DO
+!    do 100 m=1,3
+!        do 30 i=2-num_ghost,num_cells+num_ghost
+!            amdq(m,i) = 0.d0
+!            apdq(m,i) = 0.d0
+!            do 90 mw=1,num_waves
+!                if (s(mw,i) < 0.d0) then
+!                    amdq(m,i) = amdq(m,i) + s(mw,i)*wave(m,mw,i)
+!                else
+!                    apdq(m,i) = apdq(m,i) + s(mw,i)*wave(m,mw,i)
+!                endif
+!            90 END DO
+!        30 END DO
+!    100 END DO
+
+    do 30 i=2-num_ghost,num_cells+num_ghost
+        !Handling dry states to compute fluctuations
+        !and correct speeds to compute with
+        !first order corrections 
+        !If both states are dry
+        hl=qr(1,i-1)
+        hr=ql(1,i)
+        if (hl<dry_tolerance .AND. hr<dry_tolerance) then
+            do j=1,3
+                amdq(j,i)=0.d0
+                apdq(j,i)=0.d0
+                ! s not used in 1st order scheme, but set to avoid issues with CFL
+                s(j,i)=0.d0 
+            END DO
+
+        else if (hl<dry_tolerance) then
+            ur=ql(2,i)/hr
+            Tr=ql(3,i)/hr
+            a = dsqrt(grav*hr)
+            x= abs(ur-a)
+            y= abs(ur)
+            z= abs(ur+a)
+            
+            AbsJacFQr(1)=0.5d0*(hr*ur*(z-x)+hr*((a+ur)*x+(a-ur)*z))/a
+            AbsJacFQr(2)=0.5d0*(hr*ur*((a-ur)*x+(a+ur)*z)+hr*((a+ur)*(a-ur)*(z-x)))/a
+            AbsJacFQr(3)=0.5d0*(hr*ur*Tr*(z-x)+hr*Tr*((a+ur)*x+(a-ur)*z))/a
+
+            amdq(1,i)=0.5d0*(hr*ur-AbsJacFQr(1))
+            amdq(2,i)=0.5d0*(ur**2*hr+0.5d0*grav*hr**2-AbsJacFQr(2))
+            amdq(3,i)=0.5d0*(hr*ur*Tr-AbsJacFQr(3))
+            
+            apdq(1,i)=0.5d0*(hr*ur+AbsJacFQr(1))
+            apdq(2,i)=0.5d0*(ur**2*hr+0.5d0*grav*hr**2+AbsJacFQr(2))
+            apdq(3,i)=0.5d0*(hr*ur*Tr+AbsJacFQr(3))
+
+        else if (hr<dry_tolerance) then
+            ul=qr(2,i-1)/hl
+            Tl=qr(3,i-1)/hl
+            a = dsqrt(grav*hl)
+            x= abs(ul-a)
+            y= abs(ul)
+            z= abs(ul+a)
+            
+            AbsJacFQr(1)=0.5d0*(hl*ul*(z-x)+hl*((a+ul)*x+(a-ul)*z))/a
+            AbsJacFQr(2)=0.5d0*(hl*ul*((a-ul)*x+(a+ul)*z)+hr*((a+ul)*(a-ul)*(z-x)))/a
+            AbsJacFQr(3)=0.5d0*(hl*ul*Tl*(z-x)+hl*Tl*((a+ul)*x+(a-ul)*z))/a
+
+            amdq(1,i)=0.5d0*(-hl*ul+AbsJacFQl(1))
+            amdq(2,i)=0.5d0*(-ul**2*hl-0.5d0*grav*hl**2+AbsJacFQl(2))
+            amdq(3,i)=0.5d0*(-hl*ul*Tl+AbsJacFQl(3))
+            
+            apdq(1,i)=-0.5d0*(hl*ul+AbsJacFQl(1))
+            apdq(2,i)=-0.5d0*(ul**2*hl+0.5d0*grav*hl**2+AbsJacFQl(2))
+            apdq(3,i)=-0.5d0*(hl*ul*Tl+AbsJacFQl(3))
+
+        else
+            do 100 m=1,3
+                amdq(m,i) = 0.d0
+                apdq(m,i) = 0.d0
+                do 90 mw=1,num_waves
+                    if (s(mw,i) < 0.d0) then
+                        amdq(m,i) = amdq(m,i) + s(mw,i)*wave(m,mw,i)
+                    else
+                        apdq(m,i) = apdq(m,i) + s(mw,i)*wave(m,mw,i)
+                    endif
+                90 END DO
+            100 END DO
+
+        END IF
+    30 END DO
+
     
     return
     end subroutine rp1
