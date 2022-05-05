@@ -306,17 +306,17 @@ Sometimes it is necessary to apply corrections to the fluctuations, we consider 
 
 First, to enforce depth positivity, whenever $h_\ell=h_r=0$,  we set 
 \begin{align}
-    \mathcal{A}^{-}\Delta Q_{i-1/2,j}=-f(Q_{i-1,j}),\quad \mathcal{A}^{+}\Delta Q_{i-1/2,j}=f(Q_{i,j}).
+    \mathcal{A}^{-}\Delta Q_{i-1/2,j}=-f(Q_{i-1,j})=\mathbf{0},\quad \mathcal{A}^{+}\Delta Q_{i-1/2,j}=f(Q_{i,j})=\mathbf{0}.
 \end{align}
 If $h_\ell=0<h_r$, then
 \begin{align}
-    \mathcal{A}^{-}\Delta Q_{i-1/2,j}&=(f(Q_{i,j})-|f'(Q_{i,j})|Q_{i,j})/2-f(Q_{i-1,j}),\\
+    \mathcal{A}^{-}\Delta Q_{i-1/2,j}&=(f(Q_{i,j})-|f'(Q_{i,j})|Q_{i,j})/2\\%-f(Q_{i-1,j}),\\
     \mathcal{A}^{+}\Delta Q_{i-1/2,j}&=(f(Q_{i,j})+|f'(Q_{i,j})|Q_{i,j})/2.
 \end{align}
 If, on the other hand, we have $h_r=0<h_\ell$, we set
 \begin{align}
     \mathcal{A}^{-}\Delta Q_{i-1/2,j}&=(-f(Q_{i-1,j})+|f'(Q_{i-1,j})|Q_{i-1,j})/2,\\
-    \mathcal{A}^{+}\Delta Q_{i-1/2,j}&=f(Q_{i,j})-(f(Q_{i-1,j})+|f'(Q_{i-1,j})|Q_{i-1,j})/2.
+    \mathcal{A}^{+}\Delta Q_{i-1/2,j}&=-(f(Q_{i-1,j})+|f'(Q_{i-1,j})|Q_{i-1,j})/2.%+f(Q_{i,j}).
 \end{align}
 Finally, to avoid nonphysical solutions, we apply an entropy fix if the characteristic speeds suggest the presence of a transonic rarefaction.
 If the $p$th wave separates two states $Q_\ell$, $Q_r$ and $\lambda^x_p(Q_\ell)<0<\lambda^x_p(Q_r)$, we define the fluctuations as
