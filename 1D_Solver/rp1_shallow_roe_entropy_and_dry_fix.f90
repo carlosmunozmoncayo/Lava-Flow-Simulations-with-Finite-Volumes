@@ -121,7 +121,6 @@ subroutine rp1(maxmx,num_eqn,num_waves,num_aux,num_ghost,num_cells, &
         !wave(4,2,i) = 0.0d0
         s(2,i) = u 
 
-    
         wave(1,3,i) = a3
         wave(2,3,i) = a3*(u+a)
         !wave(,4,i) = a4*v(i)
@@ -149,32 +148,17 @@ subroutine rp1(maxmx,num_eqn,num_waves,num_aux,num_ghost,num_cells, &
 !     # amdq = SUM s*wave   over left-going waves
 !     # apdq = SUM s*wave   over right-going waves
 
-!    do 100 m=1,3
-!        do 30 i=2-num_ghost,num_cells+num_ghost
-!            amdq(m,i) = 0.d0
-!            apdq(m,i) = 0.d0
-!            do 90 mw=1,num_waves
-!                if (s(mw,i) < 0.d0) then
-!                    amdq(m,i) = amdq(m,i) + s(mw,i)*wave(m,mw,i)
-!                else
-!                    apdq(m,i) = apdq(m,i) + s(mw,i)*wave(m,mw,i)
-!                endif
-!            90 END DO
-!        30 END DO
-!    100 END DO
-
     do 30 i=2-num_ghost,num_cells+num_ghost
         !Handling dry states to compute fluctuations
         !and correct speeds to compute with
         !first order corrections 
-        !If both states are dry
         hl=qr(1,i-1)
         hr=ql(1,i)
         if (hl<dry_tolerance .AND. hr<dry_tolerance) then
             do j=1,3
                 amdq(j,i)=0.d0
                 apdq(j,i)=0.d0
-                ! s not used in 1st order scheme, but set to avoid issues with CFL
+! s not used in 1st order scheme, but we set it to avoid issues with CFL
                 s(j,i)=0.d0 
             END DO
 
@@ -186,10 +170,10 @@ subroutine rp1(maxmx,num_eqn,num_waves,num_aux,num_ghost,num_cells, &
             y= abs(ur)
             z= abs(ur+a)
             
-            AbsJacFQr(1)=0.5d0*(hr*ur*(z-x)+hr*((a+ur)*x+(a-ur)*z))/a
-            AbsJacFQr(2)=0.5d0*(hr*ur*((a-ur)*x+(a+ur)*z)+hr*((a+ur)*(a-ur)*(z-x)))/a
-            AbsJacFQr(3)=0.5d0*(hr*ur*Tr*(z-x)+hr*Tr*((a+ur)*x+(a-ur)*z))/a
-
+            AbsJacFQr(1)=0.5d0*hr*(x+z)
+            AbsJacFQr(2)=0.5d0*hr*(ur*(x+z)+a*(z-x))
+            AbsJacFQr(3)=0.5d0*hr*Tr*(x+z)
+            
             amdq(1,i)=0.5d0*(hr*ur-AbsJacFQr(1))
             amdq(2,i)=0.5d0*(ur**2*hr+0.5d0*grav*hr**2-AbsJacFQr(2))
             amdq(3,i)=0.5d0*(hr*ur*Tr-AbsJacFQr(3))
@@ -206,9 +190,9 @@ subroutine rp1(maxmx,num_eqn,num_waves,num_aux,num_ghost,num_cells, &
             y= abs(ul)
             z= abs(ul+a)
             
-            AbsJacFQr(1)=0.5d0*(hl*ul*(z-x)+hl*((a+ul)*x+(a-ul)*z))/a
-            AbsJacFQr(2)=0.5d0*(hl*ul*((a-ul)*x+(a+ul)*z)+hr*((a+ul)*(a-ul)*(z-x)))/a
-            AbsJacFQr(3)=0.5d0*(hl*ul*Tl*(z-x)+hl*Tl*((a+ul)*x+(a-ul)*z))/a
+            AbsJacFQl(1)=0.5d0*hl*(x+z)
+            AbsJacFQl(2)=0.5d0*hl*(ul*(x+z)+a*(z-x))
+            AbsJacFQl(3)=0.5d0*hl*Tl*(x+z)
 
             amdq(1,i)=0.5d0*(-hl*ul+AbsJacFQl(1))
             amdq(2,i)=0.5d0*(-ul**2*hl-0.5d0*grav*hl**2+AbsJacFQl(2))
