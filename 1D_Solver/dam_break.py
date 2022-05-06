@@ -54,18 +54,24 @@ def qinit(state,IC='dam_break'):
     if IC=='dam-break':
         bath=np.zeros(np.size(xc))
         state.aux[0,:]= bath
-        zl = 3.
+        zl = 5.
         ul = 0.
-        zr = 1.
+        zr = 1.e-4
         ur = 0.
         hl= (zl-bath)*(xc<=x0)
         hr= (zr-bath)*(xc>x0)
         q[depth,:] = hl+hr
         q[momentum_U,:] = hl*ul + hr*ur
         q[momentum_T,:] = hl*T0 + hr*T0
-    elif IC=='stationary-state':
+    elif IC=='stationary-flat':
         bath=np.zeros(np.size(xc))
         state.aux[0,:]= bath
+        q[depth,:] = 1- state.aux[0, :]
+        q[momentum_U,:] = 0.
+        q[momentum_T,:] = T0*state.q[depth,:]
+    elif IC=='stationary-bump':
+        bath=np.zeros(np.size(xc))
+        state.aux[0,:]= state.aux[0, :] = 0.8 * np.exp(-xc**2 / 0.2**2) - 1.0
         #temp=T0*(xc>=-1)*(xc<=1)+T_env*(xc<-1)+T_env*(xc>1)
         q[depth,:] = 1- state.aux[0, :]
         q[momentum_U,:] = 0.
@@ -80,7 +86,21 @@ def qinit(state,IC='dam_break'):
         state.aux[0,:]= bath
         q[depth,:] = 5- state.aux[0, :]
         q[momentum_U,:] = 0.
-        q[momentum_T,:] = T0*q[depth,:] 
+        q[momentum_T,:] = T0*q[depth,:]
+    elif IC=='dry-slope':
+        bath=0.2*xc+1
+        state.aux[0,:]=bath
+        q[depth,:] = 1*(xc>=x0)+(1.e-4)*(xc<x0)
+        q[momentum_U,:] = 0.
+        q[momentum_T,:] = T0*q[depth,:]
+    elif IC=='double-dam-break':
+        bath=np.zeros(np.size(xc))
+        state.aux[0,:] = bath
+        q[depth,:] = 5*(xc>-0.5)*(xc<0.5)+(1.e-4)*(xc<=-0.5)*(xc>=0.5)
+        q[momentum_U,:] = 0.
+        q[momentum_T,:] = T0*q[depth,:]
+
+
 
 #    elif IC=='2-shock':
 #        hl = 1.
@@ -103,23 +123,23 @@ def source_step_Lava_Flow(solver,state,dt):
     This is a Clawpack-style source term routine, which approximates
     the integral of the source terms over a step.
     """
+    #Obtaining data from state
+    dryt=state.problem_data['dry_tolerance'] 
+    q = state.q
+    bath=state.aux
+    xc = state.grid.x.centers
+    
     #Obtaining parameters characteristic to the lava
     rho,b,cp,kappa,lambd,Tc,T0,mu_r=get_lava_parameters("Etna")
     nu_r=mu_r/rho
     T_env=300
-
-    #Obtaining data from state
-    q = state.q
-    bath=state.aux
-    xc = state.grid.x.centers
-
+    
     #Computing slope for bathymetry
     dx=xc[3]-xc[2]
     dHdx=np.zeros(np.size(bath[0]))
     dHdx[1:]=(1/dx)*(bath[0,1:]-bath[0,0:-1])
     dHdx[0]=dHdx[1]
  
-
     h = q[0,:]
     u   = q[1,:]/h
     T   = q[2,:]/h
@@ -130,11 +150,9 @@ def source_step_Lava_Flow(solver,state,dt):
     W=2*1.e-6
     K=(4*1.e-3)/h
     
-    #Integrating one step in time
-    q[1,:] = (h**2)*q[1,:]/(h**2+3*nu_r*dt*np.exp(-b*(T-T0)))-grav*dt*h*dHdx
-    q[2,:] = q[2,:]+dt*(-E*(T**4-T_env**4)-W*(T-T_env)-H*(T-Tc)+K*(u**2)*np.exp(-b*(T-T0)))
-    #print(q[2,50])
-
+    #Integrating one step in time just of the cell is not dry
+    q[1,:] = np.where(h<=dryt,  q[1,:],  (h**2)*q[1,:]/(h**2+3*nu_r*dt*np.exp(-b*(T-T0)))-grav*dt*h*dHdx)
+    q[2,:] = np.where(h<=dryt, q[2,:], q[2,:]+dt*(-E*(T**4-T_env**4)-W*(T-T_env)-H*(T-Tc)+K*(u**2)*np.exp(-b*(T-T0))))
 
 def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_type='classic',
           riemann_solver='monthe', disable_output=False):
@@ -155,8 +173,8 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
  
     if solver_type == 'classic':
         solver = pyclaw.ClawSolver1D(rs)
-        #solver.order=1
-        solver.limiters = pyclaw.limiters.tvd.vanleer
+        solver.order=1
+        #solver.limiters = pyclaw.limiters.tvd.vanleer
         #Adding source term to conservation laws
         solver.step_source=source_step_Lava_Flow
     elif solver_type == 'sharpclaw':
@@ -164,7 +182,7 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
 
     solver.kernel_language = kernel_language
 
-    solver.bc_lower[0] = pyclaw.BC.extrap
+    solver.bc_lower[0] = pyclaw.BC.wall
     solver.bc_upper[0] = pyclaw.BC.extrap
     #Auxiliary vector will contain bathymetry
     solver.aux_bc_lower[0] = pyclaw.BC.extrap
@@ -181,12 +199,12 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
     state = pyclaw.State(domain,num_eqn,num_aux=1)
 
     # Gravitational constant
-    state.problem_data['grav'] = grav
+    state.problem_data['grav'] = 9.8
     state.problem_data['dry_tolerance'] = 1e-3
     state.problem_data['sea_level'] = 0.0
     
 
-    IC='slope'
+    IC='dry-slope'
     qinit(state,IC=IC)
 
 
@@ -194,7 +212,7 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
     claw.keep_copy = True
     if disable_output:
         claw.output_format = None
-    claw.tfinal = 5.0
+    claw.tfinal = 30.0
     claw.solution = pyclaw.Solution(state,domain)
     claw.solver = solver
     claw.outdir = outdir
@@ -232,7 +250,7 @@ def setplot(plotdata):
     rgb_converter = lambda triple: [float(rgb) / 255.0 for rgb in triple]
 
     # Figure for depth
-    plotfigure = plotdata.new_plotfigure(name='Water height', figno=0)
+    plotfigure = plotdata.new_plotfigure(name='Lava height', figno=0)
     # Set up for axes in this figure:
     plotaxes = plotfigure.new_plotaxes()
     plotaxes.xlimits = [lowerx,upperx]
@@ -260,7 +278,7 @@ def setplot(plotdata):
     plotaxes = plotfigure.new_plotaxes()
     plotaxes.axescmd = 'subplot(312)'
     plotaxes.xlimits = [lowerx,upperx]
-    plotaxes.title = 'Momentum'
+    plotaxes.title = 'Velocity'
 
     # Set up for item on these axes:
     plotitem = plotaxes.new_plotitem(plot_type='1d')
@@ -276,7 +294,7 @@ def setplot(plotdata):
     plotaxes = plotfigure.new_plotaxes()
     plotaxes.axescmd = 'subplot(313)'
     plotaxes.xlimits = [lowerx,upperx]
-    plotaxes.title = 'Momentum_T'
+    plotaxes.title = 'Temperature'
 
     # Set up for item on these axes:
     plotitem = plotaxes.new_plotitem(plot_type='1d')
