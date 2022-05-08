@@ -45,60 +45,111 @@ def get_lava_parameters(lava_flow):
     return rho,b,cp,kappa,lambd,Tc,T0,mu_r
 
 def qinit(state,IC='dam_break'):
+
     q=state.q
+    dryt=state.problem_data['dry_tolerance'] 
     x0=0.
     xc = state.grid.x.centers
     rho,b,cp,kappa,lambd,Tc,T0,mu_r=get_lava_parameters("Etna")
     T_env=300
+    #T0=1000 #Cold lava
 
     if IC=='dam-break':
         bath=np.zeros(np.size(xc))
         state.aux[0,:]= bath
-        zl = 5.
+        ul = 0.
+        ur = 0.
+        hl= 2
+        hr= 1.e-4
+        q[depth,:] = hl*(xc<=x0)+hr*(xc>x0)
+        q[momentum_U,:] = hl*ul + hr*ur
+        q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
+    elif IC=='dam-break-sharp-obstacle':
+        bath=2*(xc>1)*(xc<2)
+        state.aux[0,:]=bath 
+        ul = 0.
+        ur = 0.
+        hl= 2
+        hr= 1.e-4
+        q[depth,:] = hl*(xc<=x0)+hr*(xc>x0)
+        q[momentum_U,:] = 0.
+        q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
+    elif IC=='dam-break-smooth-obstacle':
+        bath=2 * np.exp(-(xc-2)**2 *10) 
+        state.aux[0,:]=bath
+        zl = 5.0
         ul = 0.
         zr = 1.e-4
         ur = 0.
         hl= (zl-bath)*(xc<=x0)
         hr= (zr-bath)*(xc>x0)
-        q[depth,:] = hl+hr
-        q[momentum_U,:] = hl*ul + hr*ur
-        q[momentum_T,:] = hl*T0 + hr*T0
+        q[depth,:] = 2*(xc<=x0)+(1.e-4)*(xc>x0)
+        q[momentum_U,:] = 0 
+        q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
+
     elif IC=='stationary-flat':
         bath=np.zeros(np.size(xc))
         state.aux[0,:]= bath
-        q[depth,:] = 1- state.aux[0, :]
+        q[depth,:] = 1
         q[momentum_U,:] = 0.
-        q[momentum_T,:] = T0*state.q[depth,:]
+        q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
     elif IC=='stationary-bump':
         bath=np.zeros(np.size(xc))
-        state.aux[0,:]= state.aux[0, :] = 0.8 * np.exp(-xc**2 / 0.2**2) - 1.0
+        state.aux[0,:]= 0.8 * np.exp(-xc**2 / 0.2**2)
         #temp=T0*(xc>=-1)*(xc<=1)+T_env*(xc<-1)+T_env*(xc>1)
         q[depth,:] = 1- state.aux[0, :]
         q[momentum_U,:] = 0.
-        q[momentum_T,:] = T0*state.q[depth,:]
+        q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
+    elif IC=='stationary-circle':
+        bath=xc**2/4
+        state.aux[0,:]=bath
+        q[depth,:] = np.where(2-bath>=0, 2-bath, 1.e-4)
+        q[momentum_U,:] = 0.
+        q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
+
     elif IC=='two-bumps':
         state.aux[0, :] = 0.8 * np.exp(-xc**2 / 0.2**2) - 1.0
         q[depth, :] = 0.1 * np.exp(-(xc + 0.4)**2 / 0.2**2) - state.aux[0, :]
         q[momentum_U, :] = 0.0
-        q[momentum_T, :] = T0*q[depth, :]
+        q[momentum_T, :] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
     elif IC=='slope':
         bath=0.4*xc+1
         state.aux[0,:]= bath
         q[depth,:] = 5- state.aux[0, :]
         q[momentum_U,:] = 0.
-        q[momentum_T,:] = T0*q[depth,:]
+        q[momentum_T,:] =  np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
     elif IC=='dry-slope':
         bath=0.2*xc+1
         state.aux[0,:]=bath
         q[depth,:] = 1*(xc>=x0)+(1.e-4)*(xc<x0)
         q[momentum_U,:] = 0.
-        q[momentum_T,:] = T0*q[depth,:]
+        q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
+    elif IC=='dry-slope-sharp-obstacle':
+        bath=0.2*xc+1+0.5*(xc>-2)*(xc<-1)
+        state.aux[0,:]=bath
+        q[depth,:] = 1*(xc>=x0)+(1.e-4)*(xc<x0)
+        q[momentum_U,:] = 0.
+        q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
+    elif IC=='dry-slope-smooth-obstacle':
+        bath=0.5*xc+2 * np.exp(-(xc+2)**2 *10)
+        state.aux[0,:]=bath
+        q[depth,:] = 3*(xc>=x0)+(1.e-4)*(xc<x0)
+        q[momentum_U,:] = 0.
+        q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
     elif IC=='double-dam-break':
         bath=np.zeros(np.size(xc))
         state.aux[0,:] = bath
         q[depth,:] = 5*(xc>-0.5)*(xc<0.5)+(1.e-4)*(xc<=-0.5)*(xc>=0.5)
         q[momentum_U,:] = 0.
+        q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
+    elif IC=='volcano-column':
+        slope=1
+        bath=(slope*xc+2)*(xc<=0)*(xc>-2)-(slope*xc-2)*(xc>0)*(xc<2)
+        state.aux[0,:] = bath
+        q[depth,:] = (4+slope-bath)*(xc>-0.5)*(xc<0.5)+(1.e-4)*(xc<=-0.5)*(xc>=0.5)
+        q[momentum_U,:] = 0.
         q[momentum_T,:] = T0*q[depth,:]
+
 
 
 
@@ -145,14 +196,14 @@ def source_step_Lava_Flow(solver,state,dt):
     T   = q[2,:]/h
 
     #Computing more parameters (these are for Etna lava flows)
-    H=(3*1.e-6)/h
+    H=np.where(h<=dryt, 0, (3*1.e-6)/h)
     E=1.5*1.e-15
     W=2*1.e-6
-    K=(4*1.e-3)/h
+    K=np.where(h<=dryt, 0, (4*1.e-3)/h)
     
     #Integrating one step in time just of the cell is not dry
     q[1,:] = np.where(h<=dryt,  q[1,:],  (h**2)*q[1,:]/(h**2+3*nu_r*dt*np.exp(-b*(T-T0)))-grav*dt*h*dHdx)
-    q[2,:] = np.where(h<=dryt, q[2,:], q[2,:]+dt*(-E*(T**4-T_env**4)-W*(T-T_env)-H*(T-Tc)+K*(u**2)*np.exp(-b*(T-T0))))
+    q[2,:] = np.where(h<=dryt, q[2,:] , q[2,:]+dt*(-E*(T**4-T_env**4)-W*(T-T_env)-H*(T-Tc)+K*(u**2)*np.exp(-b*(T-T0))))
 
 def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_type='classic',
           riemann_solver='monthe', disable_output=False):
@@ -183,7 +234,7 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
     solver.kernel_language = kernel_language
 
     solver.bc_lower[0] = pyclaw.BC.wall
-    solver.bc_upper[0] = pyclaw.BC.extrap
+    solver.bc_upper[0] = pyclaw.BC.wall
     #Auxiliary vector will contain bathymetry
     solver.aux_bc_lower[0] = pyclaw.BC.extrap
     solver.aux_bc_upper[0] = pyclaw.BC.extrap
@@ -199,12 +250,13 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
     state = pyclaw.State(domain,num_eqn,num_aux=1)
 
     # Gravitational constant
-    state.problem_data['grav'] = 9.8
+    state.problem_data['grav'] = 9.81
     state.problem_data['dry_tolerance'] = 1e-3
     state.problem_data['sea_level'] = 0.0
     
+    
+    IC='dry-slope-smooth-obstacle'
 
-    IC='dry-slope'
     qinit(state,IC=IC)
 
 
@@ -212,10 +264,11 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
     claw.keep_copy = True
     if disable_output:
         claw.output_format = None
-    claw.tfinal = 30.0
+    claw.tfinal = 5
     claw.solution = pyclaw.Solution(state,domain)
     claw.solver = solver
     claw.outdir = outdir
+    claw.num_output_times = 10
     claw.setplot = setplot
     claw.write_aux_init = True
 
@@ -254,6 +307,7 @@ def setplot(plotdata):
     # Set up for axes in this figure:
     plotaxes = plotfigure.new_plotaxes()
     plotaxes.xlimits = [lowerx,upperx]
+    plotaxes.ylimits = [-3,5]#[-0.1,0.5]#
     plotaxes.title = 'Water height'
     plotaxes.axescmd = 'subplot(311)'
 
