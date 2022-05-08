@@ -263,7 +263,7 @@ This solution consists on a Roe linearization of the problem, using the averages
 We consider then, a linearized version of \eqref{eq:RP x direction},
 \begin{align}
             \label{eq:RP x direction Roe}
-            q_t+f'(\bar{q})q&=0,\\
+            q_t+f'(\bar{q})q_x&=0,\\
             q(x,0)&=\begin{cases}
                 Q_{i-1,j}, &x<0,\\
                 Q_{i,j}, &x\geq 0.
@@ -306,7 +306,7 @@ Sometimes it is necessary to apply corrections to the fluctuations, we consider 
 
 First, to enforce depth positivity, whenever $h_\ell=h_r=0$,  we set 
 \begin{align}
-    \mathcal{A}^{-}\Delta Q_{i-1/2,j}=-f(Q_{i-1,j})=\mathbf{0},\quad \mathcal{A}^{+}\Delta Q_{i-1/2,j}=f(Q_{i,j})=\mathbf{0}.
+    \mathcal{A}^{-}\Delta Q_{i-1/2,j}=\mathbf{0},\quad \mathcal{A}^{+}\Delta Q_{i-1/2,j}=\mathbf{0}.
 \end{align}
 If $h_\ell=0<h_r$, then
 \begin{align}
