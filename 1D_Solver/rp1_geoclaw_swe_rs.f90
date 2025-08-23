@@ -69,7 +69,7 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,fwave,s,amdq,apdq)
             phil = qr(1, i - 1) * u_l**2 + 0.5d0 * grav * qr(1, i - 1)**2
       else
             u_l = 0.d0
-            T_l = 0.d0
+            T_l = 300.d0
             hu_l = 0.d0
             hTl = 0.d0
             phil = 0.d0
@@ -83,7 +83,7 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,fwave,s,amdq,apdq)
             phir = ql(1, i) * u_r**2 + 0.5d0 * grav * ql(1, i)**2
       else
             u_r = 0.d0
-            T_r = 0.d0
+            T_r = 300.d0
             hu_r = 0.d0
             hTr = 0.d0
             phir = 0.d0

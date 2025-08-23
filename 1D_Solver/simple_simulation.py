@@ -18,8 +18,8 @@ The default initial condition used here models a dam break.
 from __future__ import absolute_import
 import numpy as np
 from clawpack import riemann
-import shallow_roe_monthe
 import geoclaw_swe_rs
+
 #from clawpack.riemann.shallow_roe_with_efix_1D_constants import depth, momentum, num_eqn
 depth=0
 momentum_U=1
@@ -45,21 +45,20 @@ def get_lava_parameters(lava_flow):
     return rho,b,cp,kappa,lambd,Tc,T0,mu_r
 
 def qinit(state,IC='dam_break'):
-
     q=state.q
     dryt=state.problem_data['dry_tolerance'] 
     x0=0.
     xc = state.grid.x.centers
     rho,b,cp,kappa,lambd,Tc,T0,mu_r=get_lava_parameters("Etna")
     T_env = 300
-    T0 = 500 #Cold lava
+    T0 = 1000 #Cold lava
 
     if IC=='dam-break':
         bath=np.zeros(np.size(xc))
         state.aux[0,:]= bath
         ul = 0.
         ur = 0.
-        hl= 2
+        hl= 2.
         hr= 1.e-4
         q[depth,:] = hl*(xc<=x0)+hr*(xc>x0)
         q[momentum_U,:] = hl*ul + hr*ur
@@ -133,7 +132,7 @@ def qinit(state,IC='dam_break'):
     elif IC=='dry-slope-smooth-obstacle':
         bath=0.5*xc+2 * np.exp(-(xc+2)**2 *10)
         state.aux[0,:]=bath
-        q[depth,:] = 3*(xc>=x0)+(1.e-4)*(xc<x0)
+        q[depth,:] = 3*(xc>=x0)+(1.)*(xc<x0)
         q[momentum_U,:] = 0.
         q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
     elif IC=='double-dam-break':
@@ -151,22 +150,6 @@ def qinit(state,IC='dam_break'):
         q[momentum_T,:] = T0*q[depth,:]
 
 
-
-
-#    elif IC=='2-shock':
-#        hl = 1.
-#        ul = 1.
-#        hr = 1.
-#        ur = -1.
-#        state.q[depth,:] = hl * (xc <= x0) + hr * (xc > x0)
-#        state.q[momentum,:] = hl*ul * (xc <= x0) + hr*ur * (xc > x0)
-#    elif IC=='perturbation':
-#        eps=0.1
-#        state.q[depth,:] = 1.0 + eps*np.exp(-(xc-x0)**2/0.5)
-#        state.q[momentum,:] = 0.
-
-#Defining source term
-
 def source_step_Lava_Flow(solver,state,dt):
     """
     Source term integration, this handles bathymetry and the temperature
@@ -175,7 +158,7 @@ def source_step_Lava_Flow(solver,state,dt):
     the integral of the source terms over a step.
     """
     #Obtaining data from state
-    dryt=state.problem_data['dry_tolerance'] 
+    dryt= state.problem_data['dry_tolerance'] 
     q = state.q
     bath=state.aux
     xc = state.grid.x.centers
@@ -184,13 +167,7 @@ def source_step_Lava_Flow(solver,state,dt):
     rho,b,cp,kappa,lambd,Tc,T0,mu_r=get_lava_parameters("Etna")
     nu_r=mu_r/rho
     T_env=300
-    
-    #Computing slope for bathymetry
-    dx=xc[3]-xc[2]
-    dHdx=np.zeros(np.size(bath[0]))
-    dHdx[1:]=(1/dx)*(bath[0,1:]-bath[0,0:-1])
-    dHdx[0]=dHdx[1]
- 
+
     h = q[0,:]
     u   = q[1,:]/h
     T   = q[2,:]/h
@@ -201,12 +178,24 @@ def source_step_Lava_Flow(solver,state,dt):
     W=2*1.e-6
     K=np.where(h<=dryt, 0, (4*1.e-3)/h)
     
-    #Integrating one step in time just of the cell is not dry
-    q[1,:] = np.where(h<=dryt,  q[1,:],  (h**2)*q[1,:]/(h**2+3*nu_r*dt*np.exp(-b*(T-T0)))-grav*dt*h*dHdx)
+    #Integrating one step in time just if the cell is not dry
+    q[1,:] = np.where(h<=dryt,  q[1,:],  (h**2)*q[1,:]/(h**2+3*nu_r*dt*np.exp(-b*(T-T0))))
     q[2,:] = np.where(h<=dryt, q[2,:] , q[2,:]+dt*(-E*(T**4-T_env**4)-W*(T-T_env)-H*(T-Tc)+K*(u**2)*np.exp(-b*(T-T0))))
 
+def clean_dry_cells_b4step(solver,state):
+    """
+    This function cleans the dry cells before each time step
+    """
+    dryt=state.problem_data['dry_tolerance'] 
+    q = state.q
+    h = q[0,:]
+    #Cleaning the dry cells
+    state.q[0,:] = np.where(h<=dryt, 0, q[0,:])
+    state.q[1,:] = np.where(h<=dryt, 0, q[1,:])
+    state.q[2,:] = np.where(h<=dryt, 300., q[2,:]) #Environmental temperature
+
 def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_type='classic',
-          riemann_solver='monthe', disable_output=False, IC="dam-break", nframes=10):
+          riemann_solver='monthe', disable_output=False, IC="dam-break", nframes=10, tfinal=5.0,mx=500):
 
     if use_petsc:
         import clawpack.petclaw as pyclaw
@@ -219,8 +208,7 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
         elif riemann_solver.lower() == 'hlle':
             raise Exception('Python HLLE solver not implemented.')
     elif kernel_language == 'Fortran':
-        if riemann_solver.lower() == 'monthe':
-            rs = shallow_roe_monthe
+            rs = geoclaw_swe_rs
  
     if solver_type == 'classic':
         solver = pyclaw.ClawSolver1D(rs)
@@ -232,6 +220,7 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
         solver = pyclaw.SharpClawSolver1D(rs)
 
     solver.kernel_language = kernel_language
+    solver.fwave = True
 
     solver.bc_lower[0] = pyclaw.BC.extrap
     solver.bc_upper[0] = pyclaw.BC.wall
@@ -242,11 +231,11 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
     solver.num_eqn=num_eqn
     solver.num_waves=num_waves
 
-    solver.fwave=False
+    # solver.before_step = clean_dry_cells_b4step
    
     xlower = lowerx
     xupper = upperx
-    mx = 500
+    # mx = 500
     x = pyclaw.Dimension(xlower,xupper,mx,name='x')
     domain = pyclaw.Domain(x)
     state = pyclaw.State(domain,num_eqn,num_aux=1)
@@ -266,7 +255,7 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
     claw.keep_copy = True
     if disable_output:
         claw.output_format = None
-    claw.tfinal = 5
+    claw.tfinal = tfinal
     claw.solution = pyclaw.Solution(state,domain)
     claw.solver = solver
     claw.outdir = outdir
@@ -317,7 +306,7 @@ def setplot(plotdata):
     plotitem = plotaxes.new_plotitem(plot_type='1d_fill_between')
     plotitem.plot_var = eta
     plotitem.plot_var2= bathy
-    plotitem.color = rgb_converter((67,183,219))
+    plotitem.color = rgb_converter((255, 69, 0))
     
     plotitem = plotaxes.new_plotitem(plot_type='1d_plot')
     plotitem.plot_var = bathy
