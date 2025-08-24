@@ -50,6 +50,13 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,fwave,s,amdq,apdq)
 
    maxiter=1
 
+   ! initialize all components to 0
+   fw(:,:) = 0.d0
+   fwave(:,:,:) = 0.d0
+   s(:,:) = 0.d0
+   amdq(:,:) = 0.d0
+   apdq(:,:) = 0.d0
+
    do i=2-mbc,mx+mbc
       !Get conservative vars
       h_l = qr(1,i-1)
@@ -60,6 +67,16 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,fwave,s,amdq,apdq)
       hTr = ql(3,i)
       b_l = auxr(1, i - 1)
       b_r = auxl(1, i)
+
+      !inform of a bad riemann problem from the start
+      if((h_r.lt.0.d0).or.(h_l .lt. 0.d0)) then
+         write(*,*) 'Negative input: hl,hr,i=',h_l,h_r,i
+      endif
+
+      !Skip problem if in a completely dry area
+      if (h_r.le.dry_tolerance.and.h_l.le.dry_tolerance) then
+         go to 30
+      endif
       
       ! # Left states
       h_l = qr(1, i - 1)
@@ -154,20 +171,13 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,fwave,s,amdq,apdq)
       !eliminate ghost fluxes for wall
       do mw=1,3
          sw(mw)=sw(mw)*wall(mw)
-         fw(1,mw)=fw(1,mw)*wall(mw) 
-         fw(2,mw)=fw(2,mw)*wall(mw)
-         fw(3,mw)=fw(3,mw)*wall(mw)
+         fw(:,mw)=fw(:,mw)*wall(mw) 
       enddo
 
       do mw=1,3
          s(mw,i)=sw(mw)
-         fwave(1,mw,i)=fw(1,mw)
-         fwave(2,mw,i)=fw(2,mw)
-         fwave(3,mw,i)=fw(3,mw)
+         fwave(:,mw,i)=fw(:,mw)
       enddo
-
-      amdq(:,i)=0.d0
-      apdq(:,i)=0.d0
 
       do mw=1,3
          if (s(mw,i) < 0.d0) then
@@ -179,6 +189,7 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,fwave,s,amdq,apdq)
             apdq(:,i)=apdq(:,i)+0.5d0*fwave(:,mw,i)
          end if
       end do
+   30   continue  
    end do
 end subroutine rp1
 
