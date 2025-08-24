@@ -44,14 +44,14 @@ def get_lava_parameters(lava_flow):
         mu_r=1000
     return rho,b,cp,kappa,lambd,Tc,T0,mu_r
 
-def qinit(state,IC='dam_break'):
+def qinit(state,IC='dam_break',Tvent=1200):
     q=state.q
     dryt=state.problem_data['dry_tolerance'] 
     x0=0.
     xc = state.grid.x.centers
     rho,b,cp,kappa,lambd,Tc,T0,mu_r=get_lava_parameters("Etna")
     T_env = 300
-    T0 = 1000 #Cold lava
+    T0 = Tvent #Cold lava
 
     if IC=='dam-break':
         bath=np.zeros(np.size(xc))
@@ -124,15 +124,15 @@ def qinit(state,IC='dam_break'):
         q[momentum_U,:] = 0.
         q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
     elif IC=='dry-slope-sharp-obstacle':
-        bath=0.2*xc+1+0.5*(xc>-2)*(xc<-1)
+        bath=0.5*xc+2*(xc>-2)*(xc<-1)
         state.aux[0,:]=bath
-        q[depth,:] = 1*(xc>=x0)+(1.e-4)*(xc<x0)
+        q[depth,:] = 3*(xc>=x0)+(1.e-4)*(xc<x0)
         q[momentum_U,:] = 0.
         q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
     elif IC=='dry-slope-smooth-obstacle':
         bath=0.5*xc+2 * np.exp(-(xc+2)**2 *10)
         state.aux[0,:]=bath
-        q[depth,:] = 3*(xc>=x0)+(1.)*(xc<x0)
+        q[depth,:] = 3*(xc>=x0)+(1.e-4)*(xc<x0)
         q[momentum_U,:] = 0.
         q[momentum_T,:] = np.where(q[depth,:]<=dryt, T_env*q[depth,:],T0*q[depth,:])
     elif IC=='double-dam-break':
@@ -159,18 +159,27 @@ def source_step_Lava_Flow(solver,state,dt):
     """
     #Obtaining data from state
     dryt= state.problem_data['dry_tolerance'] 
+    friction_coeff= state.problem_data['friction_coeff']
+    friction_depth = state.problem_data['friction_depth']
+    g= state.problem_data['grav']
     q = state.q
     bath=state.aux
     xc = state.grid.x.centers
+
+    h   = q[0,:]
+    u   =  np.where(h<=dryt, 0, q[1,:]/h)
+
+    #Semi-implicit integration of friction source term
+    if friction_coeff>0:
+        logical_var = np.logical_and(h>dryt, h<=friction_depth)
+        gamma = np.where(logical_var, 0, np.abs(q[1,:])*(g*friction_coeff**2)/(h**(7.0/3.0)))
+        q[1,:] = np.where(logical_var, 0, q[1,:]/(1.0 + dt*gamma))
     
     #Obtaining parameters characteristic to the lava
     rho,b,cp,kappa,lambd,Tc,T0,mu_r=get_lava_parameters("Etna")
     nu_r=mu_r/rho
     T_env=300
-
-    h = q[0,:]
-    u   = q[1,:]/h
-    T   = q[2,:]/h
+    T   = np.where(h<=dryt, T_env, q[2,:]/h)
 
     #Computing more parameters (these are for Etna lava flows)
     H=np.where(h<=dryt, 0, (3*1.e-6)/h)
@@ -180,7 +189,7 @@ def source_step_Lava_Flow(solver,state,dt):
     
     #Integrating one step in time just if the cell is not dry
     q[1,:] = np.where(h<=dryt,  q[1,:],  (h**2)*q[1,:]/(h**2+3*nu_r*dt*np.exp(-b*(T-T0))))
-    q[2,:] = np.where(h<=dryt, q[2,:] , q[2,:]+dt*(-E*(T**4-T_env**4)-W*(T-T_env)-H*(T-Tc)+K*(u**2)*np.exp(-b*(T-T0))))
+    q[2,:] = np.where(h<=dryt,  q[2,:], q[2,:]+dt*(-E*(T**4-T_env**4)-W*(T-T_env)-H*(T-Tc)+K*(u**2)*np.exp(-b*(T-T0))))
 
 def clean_dry_cells_b4step(solver,state):
     """
@@ -190,12 +199,13 @@ def clean_dry_cells_b4step(solver,state):
     q = state.q
     h = q[0,:]
     #Cleaning the dry cells
-    state.q[0,:] = np.where(h<=dryt, 0, q[0,:])
-    state.q[1,:] = np.where(h<=dryt, 0, q[1,:])
-    state.q[2,:] = np.where(h<=dryt, 300., q[2,:]) #Environmental temperature
+    # state.q[0,:] = np.where(h<=dryt, 0, q[0,:])
+    state.q[1,:] = np.where(h<=dryt, 0., q[1,:])
+    state.q[2,:] = np.where(h<=dryt, 0., q[2,:]) #Environmental temperature
 
 def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_type='classic',
-          riemann_solver='monthe', disable_output=False, IC="dam-break", nframes=10, tfinal=5.0,mx=500):
+        riemann_solver='monthe', disable_output=False, IC='dry-slope-smooth-obstacle',
+        nframes=10, tfinal=5.0,mx=500,Tvent=1200):
 
     if use_petsc:
         import clawpack.petclaw as pyclaw
@@ -231,24 +241,49 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
     solver.num_eqn=num_eqn
     solver.num_waves=num_waves
 
+    solver.cfl_max=0.95
+    solver.cfl_desired=0.85
+
     # solver.before_step = clean_dry_cells_b4step
    
     xlower = lowerx
     xupper = upperx
-    # mx = 500
     x = pyclaw.Dimension(xlower,xupper,mx,name='x')
     domain = pyclaw.Domain(x)
     state = pyclaw.State(domain,num_eqn,num_aux=1)
+    
+    ###############################################################
+    ############# Problem parameters ##############################
+    ###############################################################
+    #Common block expected in Fortran (not case sensitive):
+    # common /cparam/ nur, Bparam, Tc, Tenv, Tr, cH, cK, Wparam, Eparam, &
+    #     dry_tolerance, grav
 
-    # Gravitational constant
+    # Gravitational constant, water, and ground parameters
     state.problem_data['grav'] = 9.81
     state.problem_data['dry_tolerance'] = 1e-3
     state.problem_data['sea_level'] = 0.0
-    
-    
-    IC='dry-slope-smooth-obstacle'
+    state.problem_data['friction_coeff'] = 1000.0 #Manning coefficient for rocky bed (?)
+    state.problem_data['friction_depth'] = 0.1 #Depth for friction to act (m)
 
-    qinit(state,IC=IC)
+    #Lava flow parameters
+    rho,b,cp,kappa,lambd,Tc,T0,mu_r=get_lava_parameters("Etna")
+    nur=mu_r/rho
+    Tenv=300
+    state.problem_data['nur'] = nur
+    state.problem_data['bparam'] = b
+    state.problem_data['tc'] = Tc
+    state.problem_data['tenv'] = Tenv
+    state.problem_data['tr'] = T0
+    state.problem_data['ch'] = 3*1.e-6
+    state.problem_data['ck'] = 4*1.e-3
+    state.problem_data['wparam'] = 2*1.e-6
+    state.problem_data['eparam'] = 1.5*1.e-15
+    ###############################################################
+    ###############################################################
+
+
+    qinit(state,IC=IC,Tvent=Tvent)
 
 
     claw = pyclaw.Controller()
