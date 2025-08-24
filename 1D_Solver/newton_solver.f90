@@ -1,19 +1,51 @@
 module newton_solver_mod
   implicit none
   private
-  public :: newton_batch
+  public :: newton_batch, set_params, print_params
 
   double precision :: nur, Bparam, Tc, Tenv, Tr, cH, cK, Wparam, Eparam !Unwrapping params
   double precision :: dry_tolerance, grav
 
-  common /cparam/ nur, Bparam, Tc, Tenv, Tr, cH, cK, Wparam, Eparam, &
-        dry_tolerance, grav
+  save nur, Bparam, Tc, Tenv, Tr, cH, cK, Wparam, Eparam
+  save dry_tolerance, grav
+  
 contains
 
   pure double precision function l2norm(vec) result(n)
     double precision, intent(in) :: vec(:)
     n = sqrt(sum(vec*vec))
   end function l2norm
+
+  subroutine set_params(params_in)
+    implicit none
+    double precision, intent(in) :: params_in(:)
+    nur = params_in(1)
+    Bparam = params_in(2)
+    Tc = params_in(3)
+    Tenv = params_in(4)
+    Tr = params_in(5)
+    cH = params_in(6)
+    cK = params_in(7)
+    Wparam = params_in(8)
+    Eparam = params_in(9)
+    dry_tolerance = params_in(10)
+    grav = params_in(11)
+  end subroutine set_params
+
+  subroutine print_params()
+    print *, "Parameters in Newton solver module:"
+    print *, "nur = ", nur
+    print *, "Bparam = ", Bparam
+    print *, "Tc = ", Tc
+    print *, "Tenv = ", Tenv
+    print *, "Tr = ", Tr
+    print *, "cH = ", cH
+    print *, "cK = ", cK
+    print *, "Wparam = ", Wparam
+    print *, "Eparam = ", Eparam
+    print *, "dry_tolerance = ", dry_tolerance
+    print *, "grav = ", grav
+  end subroutine print_params
 
   ! f(q, qn) -> fq
   subroutine f(q, qn,  dt, fq)
@@ -32,6 +64,7 @@ contains
   
     Hcap = cH/h
     Kcap = cK/h
+
 
     fq(1) = 0.d0 ! No equation for eta
     fq(2) = (u-qn(2))*h/dt + (3*nur/h**2.d0)*exp(-Bparam*(T-Tr))
@@ -114,6 +147,3 @@ contains
   end subroutine newton_batch
 
 end module newton_solver_mod
-
-!Call like 
-!v = newton_solver.newton_solver_mod.newton_batch(u=u0, tol_f= 1e-8, tol_step=1e-8, maxit=50)

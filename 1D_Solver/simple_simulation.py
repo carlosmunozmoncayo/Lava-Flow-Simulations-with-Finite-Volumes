@@ -19,6 +19,7 @@ from __future__ import absolute_import
 import numpy as np
 from clawpack import riemann
 import geoclaw_swe_rs
+import newton_solver
 
 #from clawpack.riemann.shallow_roe_with_efix_1D_constants import depth, momentum, num_eqn
 depth=0
@@ -149,7 +150,6 @@ def qinit(state,IC='dam_break',Tvent=1200):
         q[momentum_U,:] = 0.
         q[momentum_T,:] = T0*q[depth,:]
 
-
 def source_step_Lava_Flow(solver,state,dt):
     """
     Source term integration, this handles bathymetry and the temperature
@@ -191,6 +191,22 @@ def source_step_Lava_Flow(solver,state,dt):
     q[1,:] = np.where(h<=dryt,  q[1,:],  (h**2)*q[1,:]/(h**2+3*nu_r*dt*np.exp(-b*(T-T0))))
     q[2,:] = np.where(h<=dryt,  q[2,:], q[2,:]+dt*(-E*(T**4-T_env**4)-W*(T-T_env)-H*(T-Tc)+K*(u**2)*np.exp(-b*(T-T0))))
 
+def source_step_Lava_Flow_implicit(solver,state,dt):
+    #Taking a backward Euler step with a Newton solver for the source term
+    q = state.q
+    drytol = state.problem_data['dry_tolerance']
+    g = state.problem_data['grav']
+
+    qp = q.copy() #Primitive variables
+    qp[1,:] = np.where(q[0,:]<=drytol, 0, q[1,:]/q[0,:]) #Velocity
+    qp[2,:] = np.where(q[0,:]<=drytol, 300, q[2,:]/q[0,:]) #Temperature
+
+    qnp1,status,iters=newton_solver.newton_solver_mod.newton_batch(qn=qp,dt=dt,tol_step=1e-14,tol_f=1.e-14,maxit=50)
+    print(np.max(np.abs(qnp1-qp)))
+    print(np.max(iters))
+    state.q[1,:] = np.where(q[0,:]<=drytol, q[1,:], qnp1[1,:]*q[0,:])
+    state.q[2,:] = np.where(q[0,:]<=drytol, q[2,:], qnp1[2,:]*q[0,:])
+
 def clean_dry_cells_b4step(solver,state):
     """
     This function cleans the dry cells before each time step
@@ -213,10 +229,7 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
         from clawpack import pyclaw
 
     if kernel_language == 'Python':
-        if riemann_solver.lower() == 'roe':
-            raise Exception('Python Roe solver not implemented.')
-        elif riemann_solver.lower() == 'hlle':
-            raise Exception('Python HLLE solver not implemented.')
+            raise Exception('Python Riemann solver not implemented.')
     elif kernel_language == 'Fortran':
             rs = geoclaw_swe_rs
  
@@ -225,7 +238,8 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
         solver.order=1
         #solver.limiters = pyclaw.limiters.tvd.vanleer
         #Adding source term to conservation laws
-        solver.step_source=source_step_Lava_Flow
+        # solver.step_source=source_step_Lava_Flow
+        solver.step_source=source_step_Lava_Flow_implicit
     elif solver_type == 'sharpclaw':
         solver = pyclaw.SharpClawSolver1D(rs)
 
@@ -255,33 +269,26 @@ def setup(use_petsc=False,kernel_language='Fortran',outdir='./_output',solver_ty
     ###############################################################
     ############# Problem parameters ##############################
     ###############################################################
-    #Common block expected in Fortran (not case sensitive):
-    # common /cparam/ nur, Bparam, Tc, Tenv, Tr, cH, cK, Wparam, Eparam, &
-    #     dry_tolerance, grav
-
     # Gravitational constant, water, and ground parameters
     state.problem_data['grav'] = 9.81
     state.problem_data['dry_tolerance'] = 1e-3
     state.problem_data['sea_level'] = 0.0
-    state.problem_data['friction_coeff'] = 1000.0 #Manning coefficient for rocky bed (?)
+    state.problem_data['friction_coeff'] = 0.025 #Manning coefficient for rocky bed (?)
     state.problem_data['friction_depth'] = 0.1 #Depth for friction to act (m)
 
     #Lava flow parameters
     rho,b,cp,kappa,lambd,Tc,T0,mu_r=get_lava_parameters("Etna")
     nur=mu_r/rho
     Tenv=300
-    state.problem_data['nur'] = nur
-    state.problem_data['bparam'] = b
-    state.problem_data['tc'] = Tc
-    state.problem_data['tenv'] = Tenv
-    state.problem_data['tr'] = T0
-    state.problem_data['ch'] = 3*1.e-6
-    state.problem_data['ck'] = 4*1.e-3
-    state.problem_data['wparam'] = 2*1.e-6
-    state.problem_data['eparam'] = 1.5*1.e-15
+    params_in = [nur, b, Tc, Tenv, T0,
+                  3*1.e-6, 4*1.e-3, 2*1.e-6, 1.5*1.e-15,
+                  state.problem_data['dry_tolerance'], state.problem_data['grav']]
+    newton_solver.newton_solver_mod.set_params(params_in)
+    newton_solver.newton_solver_mod.print_params()
     ###############################################################
     ###############################################################
 
+    
 
     qinit(state,IC=IC,Tvent=Tvent)
 
